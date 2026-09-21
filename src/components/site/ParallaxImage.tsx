@@ -87,7 +87,7 @@ export default function ParallaxImage({
           fill
           sizes={sizes}
           priority={priority}
-          loading={loading}
+          loading={priority ? undefined : loading}
           className={`object-cover ${imgClassName}`}
         />
       </div>

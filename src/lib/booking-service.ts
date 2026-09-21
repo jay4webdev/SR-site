@@ -59,7 +59,7 @@ export async function createBooking(raw: unknown) {
     .select({ name: destinations.name })
     .from(destinations)
     .where(eq(destinations.active, true));
-  if (!dests.some((d) => d.name === input.destination)) {
+  if (!dests.some((d: any) => d.name === input.destination)) {
     fieldErrors.destination = "Please choose a destination.";
   }
 

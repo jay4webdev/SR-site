@@ -24,7 +24,7 @@ async function ensureSlugUnique(slug: string, exceptId?: number) {
     .from(tripTypes);
   let candidate = slug;
   let n = 2;
-  while (rows.some((r) => r.slug === candidate && r.id !== exceptId)) {
+  while (rows.some((r: any) => r.slug === candidate && r.id !== exceptId)) {
     candidate = `${slug}-${n++}`;
   }
   return candidate;

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import ParallaxImage from "./ParallaxImage";
 import Reveal from "./Reveal";
 
@@ -59,9 +60,9 @@ export default function GroupTrips() {
         </div>
 
         <Reveal className="mt-14 text-center">
-          <a href="/#community" className="btn btn-dark">
+          <Link href="/#community" className="btn btn-dark">
             Join Our WhatsApp Community
-          </a>
+          </Link>
         </Reveal>
       </div>
     </section>

@@ -13,7 +13,7 @@ export async function GET() {
   const header = ["ID", "WhatsApp Number", "Source", "Joined At"];
   const lines = [
     header.join(","),
-    ...rows.map((r) =>
+    ...rows.map((r: any) =>
       [r.id, r.whatsapp, r.source, r.createdAt].map(csvEscape).join(",")
     ),
   ];

@@ -21,7 +21,7 @@ async function uniqueSlug(slug: string, exceptId?: number) {
   const rows = await db.select({ id: activities.id, slug: activities.slug }).from(activities);
   let candidate = slug;
   let n = 2;
-  while (rows.some((r) => r.slug === candidate && r.id !== exceptId)) {
+  while (rows.some((r: any) => r.slug === candidate && r.id !== exceptId)) {
     candidate = `${slug}-${n++}`;
   }
   return candidate;

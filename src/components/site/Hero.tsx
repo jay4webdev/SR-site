@@ -47,7 +47,7 @@ export default function Hero() {
         </div>
       </div>
 
-      <a
+      <Link
         href="/#experiences"
         aria-label="Scroll to experiences"
         className="group absolute bottom-8 right-7 z-10 hidden items-center gap-4 text-ivory/70 transition-colors hover:text-ivory sm:flex lg:right-10"
@@ -58,7 +58,7 @@ export default function Hero() {
         <span className="relative h-16 w-px overflow-hidden bg-ivory/25">
           <span className="animate-float-y absolute inset-x-0 top-0 h-6 bg-teal-300" />
         </span>
-      </a>
+      </Link>
     </section>
   );
 }

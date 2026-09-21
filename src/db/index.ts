@@ -1,32 +1,96 @@
-import { drizzle } from "drizzle-orm/node-postgres";
+import { drizzle as drizzlePg } from "drizzle-orm/node-postgres";
+import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
 import { Pool } from "pg";
+import { PGlite } from "@electric-sql/pglite";
+import { initInMemoryDb } from "./init";
 
 // DATABASE_URL is the app's canonical variable. POSTGRES_URL is accepted so
 // Vercel Marketplace / Neon integrations work without a code change.
-const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
-
-if (!databaseUrl) {
-  throw new Error("DATABASE_URL or POSTGRES_URL is required");
-}
+const rawDatabaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+const isPlaceholderUrl =
+  !rawDatabaseUrl ||
+  rawDatabaseUrl.includes("HOST") ||
+  rawDatabaseUrl.includes("USER:PASSWORD") ||
+  rawDatabaseUrl.includes("placeholder") ||
+  rawDatabaseUrl.trim() === "";
+const databaseUrl = isPlaceholderUrl ? undefined : rawDatabaseUrl;
 
 const globalForDb = globalThis as typeof globalThis & {
   __arenaNextJsPostgresqlPool?: Pool;
+  __arenaDb?: any;
+  __arenaPglite?: PGlite;
+  __arenaPgliteReady?: boolean;
+  __arenaPgliteInitPromise?: Promise<void>;
 };
 
-// Keep each serverless instance conservative with database connections.
-// Hosted Postgres URLs (Neon, Supabase, Vercel Marketplace providers) should
-// include `sslmode=require`; node-postgres reads that from the connection URL.
-export const pool =
-  globalForDb.__arenaNextJsPostgresqlPool ??
-  new Pool({
-    connectionString: databaseUrl,
-    max: Number(process.env.DATABASE_POOL_MAX || 3),
-    idleTimeoutMillis: 20_000,
-    connectionTimeoutMillis: 10_000,
-  });
+function createDb() {
+  if (databaseUrl) {
+    try {
+      const poolInstance =
+        globalForDb.__arenaNextJsPostgresqlPool ??
+        new Pool({
+          connectionString: databaseUrl,
+          max: Number(process.env.DATABASE_POOL_MAX || 3),
+          idleTimeoutMillis: 20_000,
+          connectionTimeoutMillis: 10_000,
+        });
 
-if (process.env.NODE_ENV !== "production") {
-  globalForDb.__arenaNextJsPostgresqlPool = pool;
+      if (process.env.NODE_ENV !== "production") {
+        globalForDb.__arenaNextJsPostgresqlPool = poolInstance;
+      }
+
+      return drizzlePg(poolInstance);
+    } catch (err) {
+      console.warn(
+        "[AI Studio] Failed to initialize Postgres pool, falling back to in-memory database:",
+        err
+      );
+    }
+  }
+
+  // In-memory PGlite fallback for preview/development in AI Studio
+  const pglite = globalForDb.__arenaPglite ?? new PGlite();
+  if (process.env.NODE_ENV !== "production") {
+    globalForDb.__arenaPglite = pglite;
+  }
+
+  const rawQuery = pglite.query.bind(pglite);
+  const rawExec = pglite.exec.bind(pglite);
+
+  if (!globalForDb.__arenaPgliteInitPromise) {
+    globalForDb.__arenaPgliteReady = false;
+    const directClient = {
+      query: rawQuery,
+      exec: rawExec,
+    } as unknown as PGlite;
+
+    globalForDb.__arenaPgliteInitPromise = initInMemoryDb(directClient)
+      .then(() => {
+        globalForDb.__arenaPgliteReady = true;
+      })
+      .catch((e) => {
+        console.error("[AI Studio] Error seeding in-memory database:", e);
+        globalForDb.__arenaPgliteReady = true;
+      });
+  }
+
+  pglite.query = async (...args: any[]) => {
+    const q = typeof args[0] === "string" ? args[0] : "";
+    if (!globalForDb.__arenaPgliteReady && !q.includes("pg_catalog")) {
+      await globalForDb.__arenaPgliteInitPromise;
+    }
+    return (rawQuery as any)(...args);
+  };
+
+  pglite.exec = async (...args: any[]) => {
+    if (!globalForDb.__arenaPgliteReady) {
+      await globalForDb.__arenaPgliteInitPromise;
+    }
+    return (rawExec as any)(...args);
+  };
+
+  return drizzlePglite(pglite);
 }
 
-export const db = drizzle(pool);
+export const pool = globalForDb.__arenaNextJsPostgresqlPool ?? null;
+export const db = (globalForDb.__arenaDb ??= createDb());
