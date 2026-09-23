@@ -94,8 +94,8 @@ export default async function ThankYouPage({
           <Link href="/" className="link-underline text-xs font-bold uppercase tracking-[0.22em] text-ivory/70 hover:text-ivory">
             Return Home
           </Link>
-          <Link href="/#community" className="link-underline text-xs font-bold uppercase tracking-[0.22em] text-ivory/70 hover:text-ivory">
-            Join the WhatsApp Community
+          <Link href="/experiences" className="link-underline text-xs font-bold uppercase tracking-[0.22em] text-ivory/70 hover:text-ivory">
+            Explore Experiences
           </Link>
         </div>
       </div>

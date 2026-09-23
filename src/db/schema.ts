@@ -247,4 +247,22 @@ export const b2bEnquiries = pgTable("b2b_enquiries", {
     .defaultNow(),
 });
 
+/* --------------------------- Media & Assets ---------------------------- */
+
+export type MediaCategory = "image" | "pdf" | "document";
+
+export const media = pgTable("media", {
+  id: serial("id").primaryKey(),
+  url: text("url").notNull().unique(),
+  filename: text("filename").notNull(),
+  originalName: text("original_name").notNull(),
+  mimeType: text("mime_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull().default(0),
+  category: text("category").$type<MediaCategory>().notNull().default("image"),
+  altText: text("alt_text"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 

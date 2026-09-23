@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import ParallaxImage from "./ParallaxImage";
 import Reveal from "./Reveal";
 
 type Status = "idle" | "loading" | "success" | "error";
@@ -45,14 +44,6 @@ export default function Community() {
 
   return (
     <section id="community" className="relative overflow-hidden bg-navy-950">
-      <ParallaxImage
-        src="/images/sandbank.jpg"
-        alt=""
-        speed={0.16}
-        decorative
-        imgClassName="opacity-25"
-      />
-      <div className="absolute inset-0 bg-gradient-to-b from-navy-950/80 via-navy-950/70 to-navy-950" />
       <div className="relative mx-auto max-w-2xl px-5 py-32 text-center sm:px-8 md:py-44">
         <Reveal>
           <p className="eyebrow text-teal-300">08 · WhatsApp Community</p>

@@ -2,11 +2,14 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useRef } from "react";
+import { Upload } from "lucide-react";
 import type { TripKind, tripTypes } from "@/db/schema";
+import type { MediaItem } from "@/lib/media";
 import { deleteTrip, saveTrip, type TripForm } from "./actions";
 import { EmptyState, Modal, PageHeader, Spinner } from "@/components/dashboard/ui";
 import { cn } from "@/lib/format";
+import { uploadMediaAction } from "../media/actions";
 
 type Trip = typeof tripTypes.$inferSelect;
 
@@ -21,7 +24,7 @@ const BLANK: TripForm = {
   sortOrder: 0,
 };
 
-const IMAGE_CHOICES = [
+const DEFAULT_IMAGE_CHOICES = [
   "/images/hero.jpg",
   "/images/yacht-exterior.jpg",
   "/images/yacht-night.jpg",
@@ -34,7 +37,13 @@ const IMAGE_CHOICES = [
   "/images/yacht-interior.jpg",
 ];
 
-export default function TripManager({ trips }: { trips: Trip[] }) {
+export default function TripManager({
+  trips,
+  availableMedia = [],
+}: {
+  trips: Trip[];
+  availableMedia?: MediaItem[];
+}) {
   const router = useRouter();
   const [rows, setRows] = useState(trips);
   const [open, setOpen] = useState(false);
@@ -42,6 +51,30 @@ export default function TripManager({ trips }: { trips: Trip[] }) {
   const [form, setForm] = useState<TripForm>(BLANK);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const mediaImages = availableMedia
+    .filter((m) => m.category === "image" || !m.url.endsWith(".pdf"))
+    .map((m) => m.url);
+  const allImages = Array.from(new Set([...DEFAULT_IMAGE_CHOICES, ...mediaImages]));
+
+  async function handleQuickUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!e.target.files || !e.target.files[0]) return;
+    const file = e.target.files[0];
+    setUploadingImage(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("name", file.name);
+      const res = await uploadMediaAction(fd);
+      if (res.ok && res.url) {
+        setForm((prev) => ({ ...prev, image: res.url! }));
+      }
+    } finally {
+      setUploadingImage(false);
+    }
+  }
 
   function openCreate() {
     setEditingId(null);
@@ -273,22 +306,40 @@ export default function TripManager({ trips }: { trips: Trip[] }) {
             </div>
           </div>
           <div>
-            <label className="field-label" htmlFor="trip-image">Image</label>
+            <div className="flex items-center justify-between">
+              <label className="field-label mb-0" htmlFor="trip-image">Image</label>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingImage}
+                className="text-[11px] font-semibold text-ocean-600 hover:text-navy-900 inline-flex items-center gap-1"
+              >
+                <Upload className="h-3 w-3" />
+                <span>{uploadingImage ? "Uploading..." : "Upload New"}</span>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleQuickUpload}
+                className="hidden"
+              />
+            </div>
             <input
               id="trip-image"
-              className="field-input"
+              className="field-input mt-1.5"
               value={form.image}
               onChange={(e) => setForm({ ...form, image: e.target.value })}
             />
-            <div className="mt-3 flex flex-wrap gap-2">
-              {IMAGE_CHOICES.map((src) => (
+            <div className="mt-3 flex flex-wrap gap-2 max-h-36 overflow-y-auto p-1">
+              {allImages.map((src) => (
                 <button
                   type="button"
                   key={src}
                   onClick={() => setForm({ ...form, image: src })}
                   className={cn(
-                    "relative h-12 w-20 overflow-hidden border-2",
-                    form.image === src ? "border-navy-900" : "border-transparent"
+                    "relative h-12 w-20 overflow-hidden border-2 transition-all",
+                    form.image === src ? "border-navy-900 ring-2 ring-navy-900/30" : "border-transparent opacity-75 hover:opacity-100"
                   )}
                 >
                   <Image src={src} alt="" fill sizes="80px" className="object-cover" />

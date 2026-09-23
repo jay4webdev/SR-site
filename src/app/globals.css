@@ -1,9 +1,8 @@
 @import "tailwindcss";
 
 @theme {
-  --font-display: var(--font-jost), ui-sans-serif, system-ui, sans-serif;
-  --font-sans: var(--font-manrope), ui-sans-serif, system-ui, -apple-system,
-    sans-serif;
+  --font-display: "Jost", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Manrope", ui-sans-serif, system-ui, -apple-system, sans-serif;
 
   --color-navy-950: #04121a;
   --color-navy-900: #071b26;

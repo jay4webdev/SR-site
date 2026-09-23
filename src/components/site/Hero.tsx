@@ -1,9 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { FileDown } from "lucide-react";
+import type { ButtonDownloadItem } from "@/lib/button-downloads";
 import ParallaxImage from "./ParallaxImage";
 
-export default function Hero() {
+export default function Hero({
+  buttonDownloads,
+}: {
+  buttonDownloads?: ButtonDownloadItem;
+}) {
   return (
     <section className="relative flex h-[100svh] min-h-[640px] items-end overflow-hidden bg-navy-950">
       <ParallaxImage
@@ -44,6 +50,17 @@ export default function Hero() {
           <Link href="/#yacht" className="btn btn-outline-light">
             Explore Finch 65
           </Link>
+          {buttonDownloads?.enabled && (
+            <a
+              href={buttonDownloads.pdfUrl}
+              download
+              className="btn inline-flex items-center gap-2 border border-ivory/30 bg-white/10 text-ivory backdrop-blur-xs hover:border-ivory hover:bg-white/20 transition-colors"
+              title={buttonDownloads.pdfLabel || "Download Rates PDF"}
+            >
+              <FileDown className="h-4 w-4 text-teal-300" />
+              <span>{buttonDownloads.buttonText}</span>
+            </a>
+          )}
         </div>
       </div>
 

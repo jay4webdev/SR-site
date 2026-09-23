@@ -235,8 +235,8 @@ function smtpTransport() {
     return nodemailer.createTransport({
       service: "gmail",
       auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_APP_PASSWORD,
+        user: process.env.GMAIL_USER?.trim(),
+        pass: process.env.GMAIL_APP_PASSWORD?.trim(),
       },
     });
   }
@@ -302,14 +302,22 @@ async function appendViaWebhook(
   row: Record<string, string | number>
 ): Promise<DeliveryResult> {
   try {
-    const res = await fetch(process.env.GOOGLE_SHEETS_WEBHOOK_URL as string, {
+    const webhookUrl = (process.env.GOOGLE_SHEETS_WEBHOOK_URL || "").trim();
+    const res = await fetch(webhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(row),
       signal: AbortSignal.timeout(12000),
       redirect: "follow",
     });
-    if (!res.ok) throw new Error(`Webhook responded ${res.status}`);
+    if (!res.ok) {
+      if (res.status === 401 && webhookUrl.includes("/dev")) {
+        throw new Error(
+          "Apps Script webhook returned 401 Unauthorized. The URL ends in /dev. Deploy as a Web App with 'Who has access: Anyone' and use the production /exec URL."
+        );
+      }
+      throw new Error(`Webhook responded ${res.status}`);
+    }
     return { ok: true, provider: "webhook" };
   } catch (err) {
     return {

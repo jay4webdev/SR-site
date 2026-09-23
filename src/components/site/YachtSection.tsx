@@ -1,36 +1,19 @@
 import Link from "next/link";
+import { FileDown } from "lucide-react";
 import type { yachts } from "@/db/schema";
+import type { ButtonDownloadItem } from "@/lib/button-downloads";
 import ParallaxImage from "./ParallaxImage";
 import Reveal from "./Reveal";
 
 type Yacht = typeof yachts.$inferSelect;
 
-function GalleryImage({
+export default function YachtSection({
   yacht,
-  label,
-  className,
-  alt,
-  speed = 0.12,
+  buttonDownloads,
 }: {
   yacht: Yacht;
-  label: string;
-  className: string;
-  alt: string;
-  speed?: number;
+  buttonDownloads?: ButtonDownloadItem;
 }) {
-  const item = yacht.gallery.find((g) => g.label === label);
-  if (!item) return null;
-  return (
-    <div className={`group relative overflow-hidden bg-navy-950 ${className}`}>
-      <ParallaxImage src={item.src} alt={alt} speed={speed} />
-      <div className="absolute bottom-4 left-4 bg-navy-950/55 px-4 py-2 backdrop-blur-sm">
-        <span className="eyebrow text-[0.6rem] text-ivory/90">{item.label}</span>
-      </div>
-    </div>
-  );
-}
-
-export default function YachtSection({ yacht }: { yacht: Yacht }) {
   const specs = [
     { label: "Maximum Speed", value: `${yacht.maxSpeedKnots}`, unit: "Knots", sub: `${yacht.maxSpeedKmh} km/h` },
     { label: "Bedrooms", value: String(yacht.bedrooms), unit: "", sub: "Private cabins" },
@@ -41,6 +24,18 @@ export default function YachtSection({ yacht }: { yacht: Yacht }) {
     { label: "Maximum Overnight Guests", value: String(yacht.maxOvernightGuests), unit: "", sub: "Overnight charters" },
     { label: "Crew", value: String(yacht.crew), unit: "", sub: "Dedicated to your charter" },
   ];
+
+  const galleryList = Array.isArray(yacht.gallery) && yacht.gallery.length > 0
+    ? yacht.gallery
+    : [
+        { label: "Exterior", src: yacht.heroImage || "/images/hero.jpg" },
+        { label: "Interior Saloon", src: "/images/yacht-exterior.jpg" },
+        { label: "Accommodation", src: "/images/yacht-cabin.jpg" },
+      ];
+
+  const firstMain = galleryList[0];
+  const sideImages = galleryList.slice(1, 3);
+  const remainingImages = galleryList.slice(3);
 
   return (
     <section id="yacht" className="bg-cream py-24 md:py-36">
@@ -76,84 +71,91 @@ export default function YachtSection({ yacht }: { yacht: Yacht }) {
           </div>
         </Reveal>
 
-        {/* Editorial gallery */}
-        <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-12">
-          <Reveal className="lg:col-span-7">
-            <GalleryImage
-              yacht={yacht}
-              label="Exterior"
-              alt="Side profile of the Finch 65 private motor yacht"
-              className="h-[380px] sm:h-[480px] lg:h-[560px]"
-              speed={0.1}
-            />
-          </Reveal>
-          <div className="flex flex-col gap-5 lg:col-span-5">
-            <Reveal delay={100}>
-              <GalleryImage
-                yacht={yacht}
-                label="Interior Saloon"
-                alt="The light, modern interior saloon of Finch 65"
-                className="h-[270px] sm:h-[272px]"
-                speed={0.16}
-              />
+        {/* Dynamic Editorial Gallery */}
+        <div className="mt-10 grid grid-cols-1 gap-5 lg:grid-cols-12">
+          {firstMain && (
+            <Reveal className={sideImages.length > 0 ? "lg:col-span-7" : "lg:col-span-12"}>
+              <div className="group relative overflow-hidden bg-navy-950 h-[380px] sm:h-[480px] lg:h-[560px]">
+                <ParallaxImage
+                  src={firstMain.src}
+                  alt={firstMain.label || "Finch 65"}
+                  speed={0.1}
+                />
+                <div className="absolute bottom-4 left-4 bg-navy-950/65 px-4 py-2 backdrop-blur-sm">
+                  <span className="eyebrow text-[0.6rem] text-ivory/90">
+                    {firstMain.label}
+                  </span>
+                </div>
+              </div>
             </Reveal>
-            <Reveal delay={180}>
-              <GalleryImage
-                yacht={yacht}
-                label="Accommodation"
-                alt="A private air-conditioned guest cabin aboard Finch 65"
-                className="h-[270px] sm:h-[272px]"
-                speed={0.16}
-              />
-            </Reveal>
+          )}
+
+          {sideImages.length > 0 && (
+            <div className="flex flex-col gap-5 lg:col-span-5">
+              {sideImages.map((img, i) => (
+                <Reveal key={`${img.src}-${i}`} delay={100 + i * 80}>
+                  <div className="group relative overflow-hidden bg-navy-950 h-[270px] sm:h-[270px]">
+                    <ParallaxImage
+                      src={img.src}
+                      alt={img.label || "Finch 65"}
+                      speed={0.14}
+                    />
+                    <div className="absolute bottom-4 left-4 bg-navy-950/65 px-4 py-2 backdrop-blur-sm">
+                      <span className="eyebrow text-[0.6rem] text-ivory/90">
+                        {img.label}
+                      </span>
+                    </div>
+                  </div>
+                </Reveal>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Additional gallery images */}
+        {remainingImages.length > 0 && (
+          <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-3">
+            {remainingImages.map((img, i) => (
+              <Reveal key={`${img.src}-${i}`} delay={80 * (i % 3)}>
+                <div className="group relative overflow-hidden bg-navy-950 h-[320px]">
+                  <ParallaxImage
+                    src={img.src}
+                    alt={img.label || "Finch 65"}
+                    speed={0.12}
+                  />
+                  <div className="absolute bottom-4 left-4 bg-navy-950/65 px-4 py-2 backdrop-blur-sm">
+                    <span className="eyebrow text-[0.6rem] text-ivory/90">
+                      {img.label}
+                    </span>
+                  </div>
+                </div>
+              </Reveal>
+            ))}
           </div>
-        </div>
+        )}
 
-        <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-3">
-          <Reveal>
-            <GalleryImage
-              yacht={yacht}
-              label="Aerial View"
-              alt="Aerial view of Finch 65 at anchor in the lagoon"
-              className="h-[320px]"
-            />
-          </Reveal>
-          <Reveal delay={100}>
-            <GalleryImage
-              yacht={yacht}
-              label="At Anchor"
-              alt="Finch 65 anchored beside a Maldivian sandbank"
-              className="h-[320px]"
-            />
-          </Reveal>
-          <Reveal delay={180}>
-            <GalleryImage
-              yacht={yacht}
-              label="Evenings Aboard"
-              alt="Finch 65 at blue hour with warm deck lighting"
-              className="h-[320px]"
-            />
-          </Reveal>
-        </div>
-
-        <Reveal className="mt-5">
-          <GalleryImage
-            yacht={yacht}
-            label="Aft Deck Dining"
-            alt="Dining set on the shaded aft deck of Finch 65"
-            className="h-[300px] sm:h-[420px]"
-            speed={0.1}
-          />
-        </Reveal>
-
+        {/* Charter CTA & Attached Downloadable PDF Button */}
         <Reveal className="mt-14 flex flex-col items-center gap-6 text-center">
           <p className="max-w-xl text-sm font-light leading-relaxed text-stone">
             Finch 65 is the vessel that enables the experience — private,
             comfortable and entirely yours for the duration of your charter.
           </p>
-          <Link href="/book" className="btn btn-dark">
-            Charter Finch 65
-          </Link>
+          <div className="flex flex-wrap items-center justify-center gap-4">
+            <Link href="/book" className="btn btn-dark">
+              Charter Finch 65
+            </Link>
+            {buttonDownloads?.enabled && (
+              <a
+                href={buttonDownloads.pdfUrl}
+                download
+                className="btn inline-flex items-center gap-2 border border-navy-900/20 bg-white text-navy-900 shadow-xs hover:border-navy-900 hover:bg-navy-900/5 transition-colors"
+                title={buttonDownloads.pdfLabel || "Download PDF"}
+              >
+                <FileDown className="h-4 w-4 text-ocean-600" />
+                <span>{buttonDownloads.buttonText}</span>
+              </a>
+            )}
+          </div>
         </Reveal>
       </div>
     </section>

@@ -5,16 +5,14 @@ import GroupTrips from "@/components/site/GroupTrips";
 import YachtSection from "@/components/site/YachtSection";
 import ActivitiesSection from "@/components/site/ActivitiesSection";
 import FoodMenu from "@/components/site/FoodMenu";
-import Testimonials from "@/components/site/Testimonials";
-import Community from "@/components/site/Community";
 import FinalCta from "@/components/site/FinalCta";
 import {
   getActiveActivities,
   getActiveDestinations,
   getActiveTripTypes,
-  getApprovedTestimonials,
   getYacht,
 } from "@/lib/queries";
+import { getButtonDownloadsConfig } from "@/lib/button-downloads";
 
 export const dynamic = "force-dynamic";
 
@@ -37,14 +35,13 @@ const JSON_LD = {
 };
 
 export default async function HomePage() {
-  const [trips, destinations, activitiesList, yacht, testimonials] =
-    await Promise.all([
-      getActiveTripTypes(),
-      getActiveDestinations(),
-      getActiveActivities(),
-      getYacht("finch-65"),
-      getApprovedTestimonials(),
-    ]);
+  const [trips, destinations, activitiesList, yacht, buttonDownloads] = await Promise.all([
+    getActiveTripTypes(),
+    getActiveDestinations(),
+    getActiveActivities(),
+    getYacht("finch-65"),
+    getButtonDownloadsConfig(),
+  ]);
 
   return (
     <>
@@ -52,15 +49,13 @@ export default async function HomePage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
       />
-      <Hero />
+      <Hero buttonDownloads={buttonDownloads.heroButton} />
       <TripTypes trips={trips} />
       {destinations[0] ? <Destination destination={destinations[0]} /> : null}
       <GroupTrips />
-      {yacht ? <YachtSection yacht={yacht} /> : null}
+      {yacht ? <YachtSection yacht={yacht} buttonDownloads={buttonDownloads.yachtButton} /> : null}
       <ActivitiesSection activities={activitiesList} />
-      <FoodMenu />
-      <Testimonials items={testimonials} />
-      <Community />
+      <FoodMenu buttonDownloads={buttonDownloads.menuButton} />
       <FinalCta />
     </>
   );

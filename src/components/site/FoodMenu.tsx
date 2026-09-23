@@ -1,10 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { FileDown, X } from "lucide-react";
+import type { ButtonDownloadItem } from "@/lib/button-downloads";
 import ParallaxImage from "./ParallaxImage";
 import Reveal from "./Reveal";
 
-export default function FoodMenu() {
+export default function FoodMenu({
+  buttonDownloads,
+}: {
+  buttonDownloads?: ButtonDownloadItem;
+}) {
   const [open, setOpen] = useState(false);
   const [zoomed, setZoomed] = useState(false);
 
@@ -47,13 +53,27 @@ export default function FoodMenu() {
             charter. Browse the Salt Republic menu and let us know your
             preferences when you request your booking.
           </p>
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className="btn btn-light mt-10"
-          >
-            Explore Our Menu
-          </button>
+
+          <div className="mt-10 flex flex-wrap items-center gap-4">
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              className="btn btn-light"
+            >
+              Explore Our Menu
+            </button>
+            {buttonDownloads?.enabled && (
+              <a
+                href={buttonDownloads.pdfUrl}
+                download
+                className="btn inline-flex items-center gap-2 border border-ivory/30 bg-white/10 text-ivory backdrop-blur-xs hover:border-ivory hover:bg-white/20 transition-colors"
+                title={buttonDownloads.pdfLabel || "Download Dining Menu PDF"}
+              >
+                <FileDown className="h-4 w-4 text-teal-300" />
+                <span>{buttonDownloads.buttonText}</span>
+              </a>
+            )}
+          </div>
         </Reveal>
       </div>
 
@@ -73,16 +93,27 @@ export default function FoodMenu() {
               <span className="eyebrow text-[0.65rem] text-teal-300">
                 Salt Republic Menu
               </span>
-              <button
-                type="button"
-                onClick={close}
-                aria-label="Close menu"
-                className="flex h-10 w-10 items-center justify-center border border-ivory/30 transition-colors hover:border-ivory hover:bg-ivory/10"
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
-                  <path d="M6 6l12 12M18 6L6 18" />
-                </svg>
-              </button>
+              <div className="flex items-center gap-3">
+                {buttonDownloads?.enabled && (
+                  <a
+                    href={buttonDownloads.pdfUrl}
+                    download
+                    className="inline-flex items-center gap-1.5 border border-ivory/30 bg-ivory/10 px-3 py-1.5 text-xs text-ivory transition-colors hover:border-ivory hover:bg-ivory/20"
+                    title={buttonDownloads.pdfLabel}
+                  >
+                    <FileDown className="h-3.5 w-3.5 text-teal-300" />
+                    <span>Download PDF</span>
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={close}
+                  aria-label="Close menu"
+                  className="flex h-10 w-10 items-center justify-center border border-ivory/30 transition-colors hover:border-ivory hover:bg-ivory/10"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
             <div
               className={`relative overflow-auto bg-white ${
@@ -99,8 +130,7 @@ export default function FoodMenu() {
               />
             </div>
             <p className="mt-3 text-center text-[0.68rem] uppercase tracking-[0.18em] text-ivory/45">
-              Tap the image to zoom · Press ESC to close · Placeholder preview —
-              official menu artwork to be supplied
+              Tap the image to zoom · Press ESC to close
             </p>
           </div>
         </div>

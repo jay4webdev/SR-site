@@ -165,11 +165,24 @@ export async function initInMemoryDb(pg: PGlite) {
       CONSTRAINT "yachts_slug_unique" UNIQUE("slug")
     );
 
+    CREATE TABLE IF NOT EXISTS "media" (
+      "id" serial PRIMARY KEY NOT NULL,
+      "url" text NOT NULL UNIQUE,
+      "filename" text NOT NULL,
+      "original_name" text NOT NULL,
+      "mime_type" text NOT NULL,
+      "size_bytes" integer DEFAULT 0 NOT NULL,
+      "category" text DEFAULT 'image' NOT NULL,
+      "alt_text" text,
+      "created_at" timestamp with time zone DEFAULT now() NOT NULL
+    );
+
     CREATE UNIQUE INDEX IF NOT EXISTS "activities_slug_idx" ON "activities" ("slug");
     CREATE UNIQUE INDEX IF NOT EXISTS "bookings_ref_idx" ON "bookings" ("ref");
     CREATE UNIQUE INDEX IF NOT EXISTS "destinations_slug_idx" ON "destinations" ("slug");
     CREATE UNIQUE INDEX IF NOT EXISTS "subscribers_whatsapp_idx" ON "subscribers" ("whatsapp");
     CREATE UNIQUE INDEX IF NOT EXISTS "trip_types_slug_idx" ON "trip_types" ("slug");
+    CREATE UNIQUE INDEX IF NOT EXISTS "media_url_idx" ON "media" ("url");
   `;
 
   await pg.exec(ddl);
@@ -341,6 +354,65 @@ export async function initInMemoryDb(pg: PGlite) {
 
   // 10. Seed settings
   await pg.query(
-    `INSERT INTO "settings" ("key", "value") VALUES ('booking_email', 'saltrepublic.mv@gmail.com')`
+    `INSERT INTO "settings" ("key", "value") VALUES ('booking_email', 'saltrepublic.mv@gmail.com')
+     ON CONFLICT ("key") DO NOTHING`
   );
+
+  const defaultButtonDownloads = JSON.stringify({
+    yachtButton: {
+      enabled: true,
+      buttonText: "Download Yacht Specs & Rates (PDF)",
+      pdfUrl: "/packages/salt-republic-usd-package.pdf",
+      pdfLabel: "Finch 65 Specifications & Charter Rates",
+    },
+    menuButton: {
+      enabled: true,
+      buttonText: "Download Dining Menu (PDF)",
+      pdfUrl: "/packages/salt-republic-mvr-package.pdf",
+      pdfLabel: "Salt Republic Dining & Beverage Menu",
+    },
+    headerButton: {
+      enabled: false,
+      buttonText: "Brochure (PDF)",
+      pdfUrl: "/packages/salt-republic-usd-package.pdf",
+      pdfLabel: "Salt Republic Luxury Charter Brochure",
+    },
+    heroButton: {
+      enabled: true,
+      buttonText: "Download Rates (PDF)",
+      pdfUrl: "/packages/salt-republic-usd-package.pdf",
+      pdfLabel: "Salt Republic Full Packages Brochure",
+    },
+  });
+
+  await pg.query(
+    `INSERT INTO "settings" ("key", "value") VALUES ('button_downloads', $1)
+     ON CONFLICT ("key") DO NOTHING`,
+    [defaultButtonDownloads]
+  );
+
+  // 11. Seed initial media items
+  const initialMedia = [
+    ["/images/hero.jpg", "hero.jpg", "Finch 65 Hero Lagoon", "image/jpeg", 280000, "image", "Finch 65 private luxury motor yacht anchored in turquoise lagoon"],
+    ["/images/yacht-exterior.jpg", "yacht-exterior.jpg", "Finch 65 Exterior", "image/jpeg", 295000, "image", "Exterior side profile of Finch 65 motor yacht"],
+    ["/images/yacht-interior.jpg", "yacht-interior.jpg", "Finch 65 Interior Saloon", "image/jpeg", 240000, "image", "Modern air-conditioned main saloon of Finch 65"],
+    ["/images/yacht-cabin.jpg", "yacht-cabin.jpg", "Finch 65 Master Stateroom", "image/jpeg", 230000, "image", "Comfortable private guest bedroom cabin"],
+    ["/images/yacht-night.jpg", "yacht-night.jpg", "Finch 65 Blue Hour", "image/jpeg", 260000, "image", "Finch 65 illuminated at dusk in Maldivian waters"],
+    ["/images/dining.jpg", "dining.jpg", "Aft Deck Dining Setup", "image/jpeg", 275000, "image", "Gourmet dining table set on the yacht aft deck"],
+    ["/images/sandbank.jpg", "sandbank.jpg", "Maldivian Sandbank", "image/jpeg", 310000, "image", "Private sandbank setup in Malé Atoll"],
+    ["/images/sunset.jpg", "sunset.jpg", "Golden Hour Sunset", "image/jpeg", 250000, "image", "Spectacular sunset cruise across the Indian Ocean"],
+    ["/images/snorkeling.jpg", "snorkeling.jpg", "Reef Snorkeling", "image/jpeg", 265000, "image", "Crystal clear lagoon reef exploration"],
+    ["/images/toys.jpg", "toys.jpg", "Water Toys & Gear", "image/jpeg", 245000, "image", "Jet ski, underwater scooters and ocean toys"],
+    ["/packages/salt-republic-usd-package.pdf", "salt-republic-usd-package.pdf", "Salt Republic Charter Packages (USD)", "application/pdf", 1450000, "pdf", "Full charter brochure and pricing in USD"],
+    ["/packages/salt-republic-mvr-package.pdf", "salt-republic-mvr-package.pdf", "Salt Republic Charter Packages (MVR)", "application/pdf", 1420000, "pdf", "Charter brochure and dining menu in MVR"],
+  ];
+
+  for (const [url, filename, originalName, mimeType, sizeBytes, category, altText] of initialMedia) {
+    await pg.query(
+      `INSERT INTO "media" ("url", "filename", "original_name", "mime_type", "size_bytes", "category", "alt_text")
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT ("url") DO NOTHING`,
+      [url, filename, originalName, mimeType, sizeBytes, category, altText]
+    );
+  }
 }

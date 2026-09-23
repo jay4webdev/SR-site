@@ -23,8 +23,29 @@ const globalForDb = globalThis as typeof globalThis & {
   __arenaPgliteInitPromise?: Promise<void>;
 };
 
+function isLocalDatabaseReachable(url: string): boolean {
+  if (!url.includes("127.0.0.1") && !url.includes("localhost")) {
+    return true;
+  }
+  try {
+    const { execSync } = require("child_process");
+    execSync(
+      `node -e "
+        const net = require('net');
+        const s = net.connect({ port: 5432, host: '127.0.0.1' }, () => { process.exit(0); });
+        s.on('error', () => process.exit(1));
+        setTimeout(() => process.exit(1), 300);
+      "`,
+      { timeout: 500, stdio: "ignore" }
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function createDb() {
-  if (databaseUrl) {
+  if (databaseUrl && isLocalDatabaseReachable(databaseUrl)) {
     try {
       const poolInstance =
         globalForDb.__arenaNextJsPostgresqlPool ??
@@ -46,6 +67,10 @@ function createDb() {
         err
       );
     }
+  } else if (databaseUrl) {
+    console.warn(
+      `[AI Studio] Local PostgreSQL at ${databaseUrl} is not accepting connections on port 5432. Falling back to embedded in-memory database.`
+    );
   }
 
   // In-memory PGlite fallback for preview/development in AI Studio
