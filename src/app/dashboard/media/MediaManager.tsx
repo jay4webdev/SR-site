@@ -172,8 +172,14 @@ export default function MediaManager({
       formData.append("name", displayName.trim());
       formData.append("altText", altInput.trim());
 
-      const res = await uploadMediaAction(formData);
-      if (res.ok) {
+      // Use the dedicated upload route (bypasses Next.js Server Action body serialization limits for large PDFs)
+      const res = await fetch("/api/admin/media/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (res.ok && data.ok) {
         setShowUploadModal(false);
         setSelectedFile(null);
         setUrlInput("");
@@ -181,7 +187,14 @@ export default function MediaManager({
         setAltInput("");
         window.location.reload();
       } else {
-        setUploadError(res.error || "Upload failed.");
+        // If API route failed, try server action as fallback
+        const fallbackRes = await uploadMediaAction(formData);
+        if (fallbackRes.ok) {
+          setShowUploadModal(false);
+          window.location.reload();
+        } else {
+          setUploadError(data.error || fallbackRes.error || "Upload failed.");
+        }
       }
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Upload error.");
@@ -208,6 +221,7 @@ export default function MediaManager({
 
     try {
       const formData = new FormData();
+      formData.append("id", String(replaceTarget.id));
       if (replaceMode === "file") {
         if (!replaceFile) {
           setReplaceError("Please select a replacement file.");
@@ -226,12 +240,25 @@ export default function MediaManager({
       formData.append("name", replaceName.trim());
       formData.append("altText", replaceAlt.trim());
 
-      const res = await replaceMediaAction(replaceTarget.id, formData);
-      if (res.ok) {
+      // Try dedicated replace route first
+      const res = await fetch("/api/admin/media/replace", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (res.ok && data.ok) {
         setReplaceTarget(null);
         window.location.reload();
       } else {
-        setReplaceError(res.error || "Replacement failed.");
+        // Fallback to Server Action
+        const fallbackRes = await replaceMediaAction(replaceTarget.id, formData);
+        if (fallbackRes.ok) {
+          setReplaceTarget(null);
+          window.location.reload();
+        } else {
+          setReplaceError(data.error || fallbackRes.error || "Replacement failed.");
+        }
       }
     } catch (err) {
       setReplaceError(err instanceof Error ? err.message : "Error replacing file.");
