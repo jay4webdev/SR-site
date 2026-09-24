@@ -7,12 +7,19 @@ import ParallaxImage from "./ParallaxImage";
 import Reveal from "./Reveal";
 
 export default function FoodMenu({
+  diningImage,
+  menuModalImage,
   buttonDownloads,
 }: {
+  diningImage?: string;
+  menuModalImage?: string;
   buttonDownloads?: ButtonDownloadItem;
 }) {
   const [open, setOpen] = useState(false);
   const [zoomed, setZoomed] = useState(false);
+
+  const bgImage = diningImage || "/images/dining.jpg";
+  const modalImg = menuModalImage || "/images/food-menu.jpg";
 
   const close = useCallback(() => {
     setOpen(false);
@@ -35,13 +42,14 @@ export default function FoodMenu({
   return (
     <section id="menu" className="relative overflow-hidden bg-navy-900">
       <ParallaxImage
-        src="/images/dining.jpg"
+        src={bgImage}
         alt="Gourmet dining prepared aboard Finch 65"
         speed={0.18}
         decorative={false}
         imgClassName="opacity-30"
       />
       <div className="absolute inset-0 bg-gradient-to-r from-navy-950/90 via-navy-950/60 to-navy-950/30" />
+
       <div className="relative mx-auto max-w-[1400px] px-5 py-32 sm:px-8 md:py-44">
         <Reveal className="max-w-xl">
           <p className="index-label text-teal-300">06 · Food &amp; Dining</p>
@@ -115,6 +123,7 @@ export default function FoodMenu({
                 </button>
               </div>
             </div>
+
             <div
               className={`relative overflow-auto bg-white ${
                 zoomed ? "cursor-zoom-out" : "cursor-zoom-in"
@@ -123,12 +132,13 @@ export default function FoodMenu({
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src="/images/food-menu.jpg"
+                src={modalImg}
                 alt="The Salt Republic food and dining menu"
                 onClick={() => setZoomed((z) => !z)}
                 className={zoomed ? "w-[160%] max-w-none" : "mx-auto w-full"}
               />
             </div>
+
             <p className="mt-3 text-center text-[0.68rem] uppercase tracking-[0.18em] text-ivory/45">
               Tap the image to zoom · Press ESC to close
             </p>

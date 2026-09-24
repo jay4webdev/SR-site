@@ -13,6 +13,7 @@ import {
   getYacht,
 } from "@/lib/queries";
 import { getButtonDownloadsConfig } from "@/lib/button-downloads";
+import { getSiteImagesConfig } from "@/lib/site-images";
 
 export const dynamic = "force-dynamic";
 
@@ -35,13 +36,15 @@ const JSON_LD = {
 };
 
 export default async function HomePage() {
-  const [trips, destinations, activitiesList, yacht, buttonDownloads] = await Promise.all([
-    getActiveTripTypes(),
-    getActiveDestinations(),
-    getActiveActivities(),
-    getYacht("finch-65"),
-    getButtonDownloadsConfig(),
-  ]);
+  const [trips, destinations, activitiesList, yacht, buttonDownloads, siteImages] =
+    await Promise.all([
+      getActiveTripTypes(),
+      getActiveDestinations(),
+      getActiveActivities(),
+      getYacht("finch-65"),
+      getButtonDownloadsConfig(),
+      getSiteImagesConfig(),
+    ]);
 
   return (
     <>
@@ -49,14 +52,29 @@ export default async function HomePage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
       />
-      <Hero buttonDownloads={buttonDownloads.heroButton} />
+      <Hero
+        heroImage={siteImages.heroImage}
+        buttonDownloads={buttonDownloads.heroButton}
+      />
       <TripTypes trips={trips} />
       {destinations[0] ? <Destination destination={destinations[0]} /> : null}
       <GroupTrips />
-      {yacht ? <YachtSection yacht={yacht} buttonDownloads={buttonDownloads.yachtButton} /> : null}
+      {yacht ? (
+        <YachtSection
+          yacht={yacht}
+          buttonDownloads={buttonDownloads.yachtButton}
+        />
+      ) : null}
       <ActivitiesSection activities={activitiesList} />
-      <FoodMenu buttonDownloads={buttonDownloads.menuButton} />
-      <FinalCta />
+      <FoodMenu
+        diningImage={siteImages.diningImage}
+        menuModalImage={siteImages.menuModalImage}
+        buttonDownloads={buttonDownloads.menuButton}
+      />
+      <FinalCta
+        bgImage={siteImages.finalCtaImage}
+        buttonDownloads={buttonDownloads.finalCtaButton}
+      />
     </>
   );
 }

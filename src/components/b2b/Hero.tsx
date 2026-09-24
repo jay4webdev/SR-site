@@ -1,12 +1,22 @@
 import Link from "next/link";
+import { FileDown } from "lucide-react";
 import ParallaxImage from "@/components/site/ParallaxImage";
 import { b2bWhatsAppLink, B2B_WHATSAPP_MESSAGE } from "@/lib/b2b-contact";
+import type { ButtonDownloadItem } from "@/lib/button-downloads";
 
-export default function Hero() {
+export default function Hero({
+  heroImage,
+  buttonDownloads,
+}: {
+  heroImage?: string;
+  buttonDownloads?: ButtonDownloadItem;
+}) {
+  const activeImage = heroImage || "/images/hero.jpg";
+
   return (
     <section className="relative flex h-[86vh] min-h-[560px] items-end overflow-hidden bg-navy-950">
       <ParallaxImage
-        src="/images/hero.jpg"
+        src={activeImage}
         alt="Finch 65, Salt Republic's private motor yacht, anchored in a Maldivian lagoon"
         speed={0.2}
         priority
@@ -28,7 +38,7 @@ export default function Hero() {
           customised ocean journeys across Malé Atoll.
         </p>
 
-        <div className="mt-10 flex flex-col gap-4 sm:flex-row sm:items-center">
+        <div className="mt-10 flex flex-wrap items-center gap-4">
           <Link href="#partner-form" className="btn btn-light">
             Become a B2B Partner
           </Link>
@@ -40,6 +50,17 @@ export default function Hero() {
           >
             WhatsApp Our B2B Team
           </a>
+          {buttonDownloads?.enabled && (
+            <a
+              href={buttonDownloads.pdfUrl}
+              download
+              className="btn inline-flex items-center gap-2 border border-ivory/30 bg-white/10 text-ivory backdrop-blur-xs hover:border-ivory hover:bg-white/20 transition-colors"
+              title={buttonDownloads.pdfLabel || "Download Tariff Sheet"}
+            >
+              <FileDown className="h-4 w-4 text-teal-300" />
+              <span>{buttonDownloads.buttonText}</span>
+            </a>
+          )}
         </div>
 
         <div className="mt-10 flex flex-wrap gap-x-10 gap-y-3 text-sm text-ivory/70">

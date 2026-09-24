@@ -14,8 +14,10 @@ import CancellationPolicy from "@/components/b2b/CancellationPolicy";
 import ContactCta from "@/components/b2b/ContactCta";
 import EnquirySection from "@/components/b2b/EnquirySection";
 import FinalCta from "@/components/b2b/FinalCta";
+import { getButtonDownloadsConfig } from "@/lib/button-downloads";
+import { getSiteImagesConfig } from "@/lib/site-images";
 
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: {
@@ -73,14 +75,22 @@ const JSON_LD = {
     "Travel-agent and B2B partner program for private yacht charters, fishing trips and bespoke ocean experiences in the Maldives.",
 };
 
-export default function TravelAgentsPage() {
+export default async function TravelAgentsPage() {
+  const [buttonConfig, siteImages] = await Promise.all([
+    getButtonDownloadsConfig(),
+    getSiteImagesConfig(),
+  ]);
+
   return (
     <>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
       />
-      <Hero />
+      <Hero
+        heroImage={siteImages.b2bHeroImage}
+        buttonDownloads={buttonConfig.b2bButton}
+      />
       <WhyPartner />
       <WhoCanPartner />
       <Commission />

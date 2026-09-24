@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import BookingForm from "@/components/site/BookingForm";
 import ParallaxImage from "@/components/site/ParallaxImage";
 import { getActiveDestinations, getActiveTripTypes } from "@/lib/queries";
+import { getSiteImagesConfig } from "@/lib/site-images";
 
 export const dynamic = "force-dynamic";
 
@@ -20,22 +21,26 @@ export default async function BookPage({
   searchParams: SearchParams;
 }) {
   const { trip } = await searchParams;
-  const [trips, destinations] = await Promise.all([
+  const [trips, destinations, siteImages] = await Promise.all([
     getActiveTripTypes(),
     getActiveDestinations(),
+    getSiteImagesConfig(),
   ]);
+
+  const bannerImage = siteImages.bookingBannerImage || "/images/yacht-exterior.jpg";
 
   return (
     <>
       <section className="relative flex h-[62vh] min-h-[440px] items-end overflow-hidden bg-navy-950">
         <ParallaxImage
-          src="/images/yacht-exterior.jpg"
+          src={bannerImage}
           alt="Finch 65 private motor yacht cruising the Indian Ocean"
           speed={0.18}
           priority
           imgClassName="opacity-85"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-navy-950/90 via-navy-950/35 to-navy-950/50" />
+
         <div className="relative z-10 mx-auto w-full max-w-[1400px] px-5 pb-16 sm:px-8">
           <p className="index-label text-teal-300">Booking Request</p>
           <h1 className="display-lg mt-6 max-w-3xl text-ivory">

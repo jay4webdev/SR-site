@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import ParallaxImage from "@/components/site/ParallaxImage";
 import { getBookingByRef } from "@/lib/queries";
+import { getSiteImagesConfig } from "@/lib/site-images";
 import { formatLongDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -19,12 +20,17 @@ export default async function ThankYouPage({
   searchParams: SearchParams;
 }) {
   const { ref } = await searchParams;
-  const booking = ref ? await getBookingByRef(ref) : null;
+  const [booking, siteImages] = await Promise.all([
+    ref ? getBookingByRef(ref) : null,
+    getSiteImagesConfig(),
+  ]);
+
+  const bannerImg = siteImages.thankYouBannerImage || "/images/hero.jpg";
 
   return (
     <section className="relative flex min-h-screen items-center overflow-hidden bg-navy-950 pt-24">
       <ParallaxImage
-        src="/images/hero.jpg"
+        src={bannerImg}
         alt=""
         speed={0.14}
         decorative
@@ -91,10 +97,16 @@ export default async function ThankYouPage({
         </div>
 
         <div className="mt-14 flex flex-wrap items-center gap-x-8 gap-y-3">
-          <Link href="/" className="link-underline text-xs font-bold uppercase tracking-[0.22em] text-ivory/70 hover:text-ivory">
+          <Link
+            href="/"
+            className="link-underline text-xs font-bold uppercase tracking-[0.22em] text-ivory/70 hover:text-ivory"
+          >
             Return Home
           </Link>
-          <Link href="/experiences" className="link-underline text-xs font-bold uppercase tracking-[0.22em] text-ivory/70 hover:text-ivory">
+          <Link
+            href="/experiences"
+            className="link-underline text-xs font-bold uppercase tracking-[0.22em] text-ivory/70 hover:text-ivory"
+          >
             Explore Experiences
           </Link>
         </div>

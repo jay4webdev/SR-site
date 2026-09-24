@@ -6,14 +6,18 @@ import type { ButtonDownloadItem } from "@/lib/button-downloads";
 import ParallaxImage from "./ParallaxImage";
 
 export default function Hero({
+  heroImage,
   buttonDownloads,
 }: {
+  heroImage?: string;
   buttonDownloads?: ButtonDownloadItem;
 }) {
+  const activeImage = heroImage || "/images/hero.jpg";
+
   return (
     <section className="relative flex h-[100svh] min-h-[640px] items-end overflow-hidden bg-navy-950">
       <ParallaxImage
-        src="/images/hero.jpg"
+        src={activeImage}
         alt="Finch 65, a private luxury motor yacht, anchored in a turquoise Maldivian lagoon"
         speed={0.22}
         priority
@@ -43,6 +47,7 @@ export default function Hero({
           <span className="text-ivory">Finch 65</span> — discover Malé Atoll
           entirely on your own terms.
         </p>
+
         <div className="mt-11 flex flex-col gap-4 [animation:fade-in_1s_ease_0.9s_both] sm:flex-row sm:items-center">
           <Link href="/book" className="btn btn-light">
             Book Your Trip

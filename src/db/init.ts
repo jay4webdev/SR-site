@@ -383,12 +383,40 @@ export async function initInMemoryDb(pg: PGlite) {
       pdfUrl: "/packages/salt-republic-rates-and-packages.pdf",
       pdfLabel: "Salt Republic Full Packages & Rates Brochure",
     },
+    b2bButton: {
+      enabled: true,
+      buttonText: "Download B2B Tariff Sheet (PDF)",
+      pdfUrl: "/packages/salt-republic-rates-and-packages.pdf",
+      pdfLabel: "Salt Republic Travel Agent Tariff & Factsheet",
+    },
+    finalCtaButton: {
+      enabled: false,
+      buttonText: "Download Charter Brochure (PDF)",
+      pdfUrl: "/packages/salt-republic-rates-and-packages.pdf",
+      pdfLabel: "Salt Republic Luxury Charter Guide",
+    },
   });
 
   await pg.query(
     `INSERT INTO "settings" ("key", "value") VALUES ('button_downloads', $1)
-     ON CONFLICT ("key") DO UPDATE SET "value" = $1, "updated_at" = now()`,
+     ON CONFLICT ("key") DO NOTHING`,
     [defaultButtonDownloads]
+  );
+
+  const defaultSiteImages = JSON.stringify({
+    heroImage: "/images/hero.jpg",
+    diningImage: "/images/dining.jpg",
+    menuModalImage: "/images/food-menu.jpg",
+    finalCtaImage: "/images/yacht-night.jpg",
+    b2bHeroImage: "/images/hero.jpg",
+    bookingBannerImage: "/images/yacht-exterior.jpg",
+    thankYouBannerImage: "/images/hero.jpg",
+  });
+
+  await pg.query(
+    `INSERT INTO "settings" ("key", "value") VALUES ('site_images', $1)
+     ON CONFLICT ("key") DO NOTHING`,
+    [defaultSiteImages]
   );
 
   // 11. Seed initial media items

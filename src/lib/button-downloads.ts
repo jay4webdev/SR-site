@@ -1,4 +1,3 @@
-import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { settings } from "@/db/schema";
 import { getSetting } from "@/lib/queries";
@@ -15,6 +14,8 @@ export type ButtonDownloadsConfig = {
   menuButton: ButtonDownloadItem;
   headerButton: ButtonDownloadItem;
   heroButton: ButtonDownloadItem;
+  b2bButton: ButtonDownloadItem;
+  finalCtaButton: ButtonDownloadItem;
 };
 
 export const DEFAULT_BUTTON_DOWNLOADS: ButtonDownloadsConfig = {
@@ -42,6 +43,18 @@ export const DEFAULT_BUTTON_DOWNLOADS: ButtonDownloadsConfig = {
     pdfUrl: "/packages/salt-republic-rates-and-packages.pdf",
     pdfLabel: "Salt Republic Full Packages & Rates Brochure",
   },
+  b2bButton: {
+    enabled: true,
+    buttonText: "Download B2B Tariff Sheet (PDF)",
+    pdfUrl: "/packages/salt-republic-rates-and-packages.pdf",
+    pdfLabel: "Salt Republic Travel Agent Tariff & Factsheet",
+  },
+  finalCtaButton: {
+    enabled: false,
+    buttonText: "Download Charter Brochure (PDF)",
+    pdfUrl: "/packages/salt-republic-rates-and-packages.pdf",
+    pdfLabel: "Salt Republic Luxury Charter Guide",
+  },
 };
 
 export async function getButtonDownloadsConfig(): Promise<ButtonDownloadsConfig> {
@@ -54,6 +67,8 @@ export async function getButtonDownloadsConfig(): Promise<ButtonDownloadsConfig>
       menuButton: { ...DEFAULT_BUTTON_DOWNLOADS.menuButton, ...(parsed.menuButton || {}) },
       headerButton: { ...DEFAULT_BUTTON_DOWNLOADS.headerButton, ...(parsed.headerButton || {}) },
       heroButton: { ...DEFAULT_BUTTON_DOWNLOADS.heroButton, ...(parsed.heroButton || {}) },
+      b2bButton: { ...DEFAULT_BUTTON_DOWNLOADS.b2bButton, ...(parsed.b2bButton || {}) },
+      finalCtaButton: { ...DEFAULT_BUTTON_DOWNLOADS.finalCtaButton, ...(parsed.finalCtaButton || {}) },
     };
   } catch {
     return DEFAULT_BUTTON_DOWNLOADS;

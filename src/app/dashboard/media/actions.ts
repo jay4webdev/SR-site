@@ -10,6 +10,22 @@ import {
   saveButtonDownloadsConfig,
   type ButtonDownloadsConfig,
 } from "@/lib/button-downloads";
+import {
+  saveSiteImagesConfig,
+  type SiteImagesConfig,
+} from "@/lib/site-images";
+
+function revalidateAllMediaConsumers() {
+  revalidatePath("/dashboard/media");
+  revalidatePath("/dashboard/yacht");
+  revalidatePath("/dashboard/trips");
+  revalidatePath("/dashboard/activities");
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/");
+  revalidatePath("/travel-agents");
+  revalidatePath("/book");
+  revalidatePath("/thank-you");
+}
 
 export async function uploadMediaAction(formData: FormData) {
   try {
@@ -40,11 +56,7 @@ export async function uploadMediaAction(formData: FormData) {
         })
         .onConflictDoNothing();
 
-      revalidatePath("/dashboard/media");
-      revalidatePath("/dashboard/yacht");
-      revalidatePath("/dashboard/trips");
-      revalidatePath("/dashboard/settings");
-      revalidatePath("/");
+      revalidateAllMediaConsumers();
       return { ok: true as const, url: cleanUrl };
     }
 
@@ -55,7 +67,6 @@ export async function uploadMediaAction(formData: FormData) {
 
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
-
     const originalName = file.name || "uploaded-file";
     const ext = path.extname(originalName).toLowerCase();
     const baseName = path
@@ -70,7 +81,7 @@ export async function uploadMediaAction(formData: FormData) {
     const isPdf = ext === ".pdf" || mimeType.includes("pdf");
     const category: MediaCategory = isPdf ? "pdf" : "image";
 
-    // Store via universal storage provider (Vercel Blob if configured, or public/uploads with mkdir recursive)
+    // Store via universal storage provider
     const stored = await storeFile({
       filename: finalFilename,
       buffer,
@@ -90,12 +101,7 @@ export async function uploadMediaAction(formData: FormData) {
       })
       .onConflictDoNothing();
 
-    revalidatePath("/dashboard/media");
-    revalidatePath("/dashboard/yacht");
-    revalidatePath("/dashboard/trips");
-    revalidatePath("/dashboard/settings");
-    revalidatePath("/");
-
+    revalidateAllMediaConsumers();
     return { ok: true as const, url: stored.url };
   } catch (err) {
     console.error("[uploadMediaAction] Upload error:", err);
@@ -106,20 +112,99 @@ export async function uploadMediaAction(formData: FormData) {
   }
 }
 
+export async function replaceMediaAction(id: number, formData: FormData) {
+  try {
+    const rows = await db.select().from(media).where(eq(media.id, id)).limit(1);
+    const existing = rows[0];
+    if (!existing) {
+      return { ok: false as const, error: "Media item not found." };
+    }
+
+    const file = formData.get("file") as File | null;
+    const urlParam = formData.get("url") as string | null;
+    const customName = (formData.get("name") as string) || "";
+    const altText = (formData.get("altText") as string) || "";
+
+    let newUrl = existing.url;
+    let newFilename = existing.filename;
+    let newMimeType = existing.mimeType;
+    let newSizeBytes = existing.sizeBytes;
+    let newCategory = existing.category;
+
+    if (file && file instanceof File && file.size > 0) {
+      const bytes = await file.arrayBuffer();
+      const buffer = Buffer.from(bytes);
+      const originalName = file.name || "replaced-file";
+      const ext = path.extname(originalName).toLowerCase();
+      const baseName = path
+        .basename(originalName, ext)
+        .toLowerCase()
+        .replace(/[^a-z0-9-_]/g, "-")
+        .slice(0, 40) || "file";
+
+      const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+      newFilename = `${baseName}-${uniqueSuffix}${ext}`;
+      newMimeType = file.type || (ext === ".pdf" ? "application/pdf" : "image/jpeg");
+      const isPdf = ext === ".pdf" || newMimeType.includes("pdf");
+      newCategory = isPdf ? "pdf" : "image";
+      newSizeBytes = buffer.length;
+
+      const stored = await storeFile({
+        filename: newFilename,
+        buffer,
+        contentType: newMimeType,
+      });
+
+      // Remove previous local file if applicable
+      if (existing.url.startsWith("/uploads/")) {
+        await removeFile(existing.url).catch(() => {});
+      }
+
+      newUrl = stored.url;
+    } else if (urlParam && urlParam.trim()) {
+      newUrl = urlParam.trim();
+      const ext = path.extname(newUrl).toLowerCase();
+      const isPdf = ext === ".pdf" || newUrl.includes(".pdf");
+      newCategory = isPdf ? "pdf" : "image";
+      newFilename = path.basename(newUrl.split("?")[0]) || "linked-file";
+      newMimeType = isPdf ? "application/pdf" : "image/jpeg";
+      newSizeBytes = 0;
+    }
+
+    await db
+      .update(media)
+      .set({
+        url: newUrl,
+        filename: newFilename,
+        originalName: customName.trim() || existing.originalName,
+        altText: altText.trim() || existing.altText,
+        mimeType: newMimeType,
+        sizeBytes: newSizeBytes,
+        category: newCategory,
+      })
+      .where(eq(media.id, id));
+
+    revalidateAllMediaConsumers();
+    return { ok: true as const, url: newUrl };
+  } catch (err) {
+    console.error("[replaceMediaAction] Error:", err);
+    return {
+      ok: false as const,
+      error: err instanceof Error ? err.message : "Replace failed.",
+    };
+  }
+}
+
 export async function deleteMediaAction(id: number) {
   try {
     const rows = await db.select().from(media).where(eq(media.id, id)).limit(1);
     const item = rows[0];
     if (!item) return { ok: false as const, error: "Media item not found." };
 
-    await removeFile(item.url);
+    await removeFile(item.url).catch(() => {});
     await db.delete(media).where(eq(media.id, id));
 
-    revalidatePath("/dashboard/media");
-    revalidatePath("/dashboard/yacht");
-    revalidatePath("/dashboard/trips");
-    revalidatePath("/dashboard/settings");
-    revalidatePath("/");
+    revalidateAllMediaConsumers();
     return { ok: true as const };
   } catch (err) {
     return {
@@ -139,7 +224,7 @@ export async function updateMediaAction(id: number, originalName: string, altTex
       })
       .where(eq(media.id, id));
 
-    revalidatePath("/dashboard/media");
+    revalidateAllMediaConsumers();
     return { ok: true as const };
   } catch (err) {
     return {
@@ -152,14 +237,25 @@ export async function updateMediaAction(id: number, originalName: string, altTex
 export async function saveButtonDownloadsAction(config: ButtonDownloadsConfig) {
   try {
     await saveButtonDownloadsConfig(config);
-    revalidatePath("/");
-    revalidatePath("/dashboard/settings");
-    revalidatePath("/dashboard/media");
+    revalidateAllMediaConsumers();
     return { ok: true as const };
   } catch (err) {
     return {
       ok: false as const,
       error: err instanceof Error ? err.message : "Could not save button settings.",
+    };
+  }
+}
+
+export async function saveSiteImagesAction(config: Partial<SiteImagesConfig>) {
+  try {
+    await saveSiteImagesConfig(config);
+    revalidateAllMediaConsumers();
+    return { ok: true as const };
+  } catch (err) {
+    return {
+      ok: false as const,
+      error: err instanceof Error ? err.message : "Could not save site images.",
     };
   }
 }

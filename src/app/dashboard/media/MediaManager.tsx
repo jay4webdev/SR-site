@@ -16,13 +16,23 @@ import {
   FileDown,
   Sparkles,
   ExternalLink,
+  RefreshCw,
+  Edit2,
+  Sliders,
+  CheckCircle2,
+  AlertCircle,
+  FolderOpen,
 } from "lucide-react";
 import type { MediaItem } from "@/lib/media";
 import type { ButtonDownloadsConfig } from "@/lib/button-downloads";
+import type { SiteImagesConfig } from "@/lib/site-images";
 import {
   uploadMediaAction,
+  replaceMediaAction,
   deleteMediaAction,
+  updateMediaAction,
   saveButtonDownloadsAction,
+  saveSiteImagesAction,
 } from "./actions";
 import { PageHeader, Spinner, Modal } from "@/components/dashboard/ui";
 
@@ -37,17 +47,21 @@ function formatBytes(bytes: number) {
 export default function MediaManager({
   media: initialMedia,
   buttonDownloads: initialConfig,
+  siteImages: initialSiteImages,
 }: {
   media: MediaItem[];
   buttonDownloads: ButtonDownloadsConfig;
+  siteImages: SiteImagesConfig;
 }) {
   const [items, setItems] = useState<MediaItem[]>(initialMedia);
-  const [config, setConfig] = useState<ButtonDownloadsConfig>(initialConfig);
-  const [activeTab, setActiveTab] = useState<"library" | "buttons">("library");
+  const [buttonConfig, setButtonConfig] = useState<ButtonDownloadsConfig>(initialConfig);
+  const [siteImages, setSiteImages] = useState<SiteImagesConfig>(initialSiteImages);
+
+  const [activeTab, setActiveTab] = useState<"library" | "site-images" | "buttons">("library");
   const [filter, setFilter] = useState<"all" | "image" | "pdf">("all");
   const [search, setSearch] = useState("");
 
-  // Upload modal states
+  // Upload modal state
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadMode, setUploadMode] = useState<"file" | "url">("file");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -58,23 +72,48 @@ export default function MediaManager({
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Preview modal
-  const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
+  // Replace / Change File modal state
+  const [replaceTarget, setReplaceTarget] = useState<MediaItem | null>(null);
+  const [replaceMode, setReplaceMode] = useState<"file" | "url">("file");
+  const [replaceFile, setReplaceFile] = useState<File | null>(null);
+  const [replaceUrlInput, setReplaceUrlInput] = useState("");
+  const [replaceName, setReplaceName] = useState("");
+  const [replaceAlt, setReplaceAlt] = useState("");
+  const [isReplacing, setIsReplacing] = useState(false);
+  const [replaceError, setReplaceError] = useState("");
+  const replaceFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Delete modal
+  // Edit details modal state
+  const [editTarget, setEditTarget] = useState<MediaItem | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editAlt, setEditAlt] = useState("");
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [updateError, setUpdateError] = useState("");
+
+  // Delete modal state
   const [deleteTarget, setDeleteTarget] = useState<MediaItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Copy feedback
-  const [copiedId, setCopiedId] = useState<number | null>(null);
+  // Preview modal state
+  const [previewItem, setPreviewItem] = useState<MediaItem | null>(null);
 
-  // Config save feedback
-  const [configSaving, setConfigSaving] = useState(false);
-  const [configSaved, setConfigSaved] = useState(false);
-  const [configError, setConfigError] = useState("");
+  // Site Image Picker modal state
+  const [siteImageTargetKey, setSiteImageTargetKey] = useState<keyof SiteImagesConfig | null>(null);
+  const [showImagePicker, setShowImagePicker] = useState(false);
+
+  // Feedback states
+  const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [buttonSaving, setButtonSaving] = useState(false);
+  const [buttonSaved, setButtonSaved] = useState(false);
+  const [buttonError, setButtonError] = useState("");
+
+  const [siteImagesSaving, setSiteImagesSaving] = useState(false);
+  const [siteImagesSaved, setSiteImagesSaved] = useState(false);
+  const [siteImagesError, setSiteImagesError] = useState("");
+
   const [, startTransition] = useTransition();
 
-  // Filtered items
+  // Filtered library items
   const filteredItems = items.filter((item) => {
     if (filter !== "all" && item.category !== filter) return false;
     if (search.trim()) {
@@ -88,8 +127,8 @@ export default function MediaManager({
   });
 
   const pdfList = items.filter((i) => i.category === "pdf" || i.url.endsWith(".pdf"));
+  const imageList = items.filter((i) => i.category === "image" || !i.url.endsWith(".pdf"));
 
-  // Copy URL
   function copyUrl(item: MediaItem) {
     const fullUrl = item.url.startsWith("http")
       ? item.url
@@ -99,7 +138,6 @@ export default function MediaManager({
     setTimeout(() => setCopiedId(null), 2000);
   }
 
-  // Handle file select
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     if (e.target.files && e.target.files[0]) {
       const f = e.target.files[0];
@@ -109,7 +147,6 @@ export default function MediaManager({
     }
   }
 
-  // Submit upload
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
     setIsUploading(true);
@@ -142,7 +179,6 @@ export default function MediaManager({
         setUrlInput("");
         setDisplayName("");
         setAltInput("");
-        // Reload full list or reload page
         window.location.reload();
       } else {
         setUploadError(res.error || "Upload failed.");
@@ -154,7 +190,90 @@ export default function MediaManager({
     }
   }
 
-  // Delete media item
+  function openReplaceModal(item: MediaItem) {
+    setReplaceTarget(item);
+    setReplaceName(item.originalName);
+    setReplaceAlt(item.altText || "");
+    setReplaceFile(null);
+    setReplaceUrlInput("");
+    setReplaceError("");
+    setReplaceMode("file");
+  }
+
+  async function handleReplace(e: React.FormEvent) {
+    e.preventDefault();
+    if (!replaceTarget) return;
+    setIsReplacing(true);
+    setReplaceError("");
+
+    try {
+      const formData = new FormData();
+      if (replaceMode === "file") {
+        if (!replaceFile) {
+          setReplaceError("Please select a replacement file.");
+          setIsReplacing(false);
+          return;
+        }
+        formData.append("file", replaceFile);
+      } else {
+        if (!replaceUrlInput.trim()) {
+          setReplaceError("Please enter a valid replacement URL.");
+          setIsReplacing(false);
+          return;
+        }
+        formData.append("url", replaceUrlInput.trim());
+      }
+      formData.append("name", replaceName.trim());
+      formData.append("altText", replaceAlt.trim());
+
+      const res = await replaceMediaAction(replaceTarget.id, formData);
+      if (res.ok) {
+        setReplaceTarget(null);
+        window.location.reload();
+      } else {
+        setReplaceError(res.error || "Replacement failed.");
+      }
+    } catch (err) {
+      setReplaceError(err instanceof Error ? err.message : "Error replacing file.");
+    } finally {
+      setIsReplacing(false);
+    }
+  }
+
+  function openEditModal(item: MediaItem) {
+    setEditTarget(item);
+    setEditName(item.originalName);
+    setEditAlt(item.altText || "");
+    setUpdateError("");
+  }
+
+  async function handleUpdateDetails(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editTarget) return;
+    setIsUpdating(true);
+    setUpdateError("");
+
+    try {
+      const res = await updateMediaAction(editTarget.id, editName, editAlt);
+      if (res.ok) {
+        setItems((prev) =>
+          prev.map((i) =>
+            i.id === editTarget.id
+              ? { ...i, originalName: editName.trim(), altText: editAlt.trim() }
+              : i
+          )
+        );
+        setEditTarget(null);
+      } else {
+        setUpdateError(res.error || "Could not update details.");
+      }
+    } catch (err) {
+      setUpdateError(err instanceof Error ? err.message : "Update error.");
+    } finally {
+      setIsUpdating(false);
+    }
+  }
+
   async function confirmDelete() {
     if (!deleteTarget) return;
     setIsDeleting(true);
@@ -169,31 +288,122 @@ export default function MediaManager({
     }
   }
 
-  // Save button configuration
-  async function handleSaveConfig(e: React.FormEvent) {
+  async function handleSaveButtons(e: React.FormEvent) {
     e.preventDefault();
-    setConfigSaving(true);
-    setConfigSaved(false);
-    setConfigError("");
+    setButtonSaving(true);
+    setButtonSaved(false);
+    setButtonError("");
 
     startTransition(async () => {
-      const res = await saveButtonDownloadsAction(config);
-      setConfigSaving(false);
+      const res = await saveButtonDownloadsAction(buttonConfig);
+      setButtonSaving(false);
       if (res.ok) {
-        setConfigSaved(true);
-        setTimeout(() => setConfigSaved(false), 3000);
+        setButtonSaved(true);
+        setTimeout(() => setButtonSaved(false), 3000);
       } else {
-        setConfigError(res.error || "Failed to save configuration.");
+        setButtonError(res.error || "Failed to save configuration.");
       }
     });
   }
 
+  async function handleSaveSiteImages(e: React.FormEvent) {
+    e.preventDefault();
+    setSiteImagesSaving(true);
+    setSiteImagesSaved(false);
+    setSiteImagesError("");
+
+    startTransition(async () => {
+      const res = await saveSiteImagesAction(siteImages);
+      setSiteImagesSaving(false);
+      if (res.ok) {
+        setSiteImagesSaved(true);
+        setTimeout(() => setSiteImagesSaved(false), 3000);
+      } else {
+        setSiteImagesError(res.error || "Failed to save site images.");
+      }
+    });
+  }
+
+  function handleSelectSiteImage(url: string) {
+    if (!siteImageTargetKey) return;
+    setSiteImages((prev) => ({ ...prev, [siteImageTargetKey]: url }));
+    setShowImagePicker(false);
+    setSiteImageTargetKey(null);
+  }
+
+  const siteSectionDefinitions: Array<{
+    key: keyof SiteImagesConfig;
+    title: string;
+    description: string;
+    location: string;
+    aspectHint: string;
+    defaultUrl: string;
+  }> = [
+    {
+      key: "heroImage",
+      title: "Homepage Hero Background",
+      description: "Primary full-screen background image displayed to first-time visitors on the homepage.",
+      location: "Homepage (Top Section)",
+      aspectHint: "16:9 Landscape / 1920x1080+",
+      defaultUrl: "/images/hero.jpg",
+    },
+    {
+      key: "diningImage",
+      title: "Food & Dining Section Background",
+      description: "Atmospheric full-width background for the onboard dining and gourmet cuisine section.",
+      location: "Homepage (Section 06 Food & Dining)",
+      aspectHint: "16:9 Landscape / 1920x1080",
+      defaultUrl: "/images/dining.jpg",
+    },
+    {
+      key: "menuModalImage",
+      title: "Food Menu Detail Graphic",
+      description: "Visual food and beverage menu shown when visitors click 'Explore Our Menu'.",
+      location: "Homepage (Menu Modal Lightbox)",
+      aspectHint: "Vertical or Square / High Resolution",
+      defaultUrl: "/images/food-menu.jpg",
+    },
+    {
+      key: "finalCtaImage",
+      title: "Final Pre-Footer CTA Background",
+      description: "Closing background image behind the final 'Your Maldives. Your Yacht.' booking callout.",
+      location: "Homepage (Pre-Footer CTA)",
+      aspectHint: "16:9 Landscape / Dusk or Evening",
+      defaultUrl: "/images/yacht-night.jpg",
+    },
+    {
+      key: "b2bHeroImage",
+      title: "Travel Agent & B2B Portal Hero",
+      description: "Header background displayed on the B2B Partner and Travel Agent program portal.",
+      location: "Travel Agents Page (/travel-agents)",
+      aspectHint: "16:9 Landscape / 1920x1080+",
+      defaultUrl: "/images/hero.jpg",
+    },
+    {
+      key: "bookingBannerImage",
+      title: "Booking Request Page Banner",
+      description: "Top header background shown to guests filling out the charter inquiry form.",
+      location: "Booking Page (/book)",
+      aspectHint: "Wide Banner / 1600x600+",
+      defaultUrl: "/images/yacht-exterior.jpg",
+    },
+    {
+      key: "thankYouBannerImage",
+      title: "Thank You Confirmation Banner",
+      description: "Header image shown to clients immediately after successfully submitting a charter inquiry.",
+      location: "Confirmation Page (/thank-you)",
+      aspectHint: "Wide Banner / 1600x600+",
+      defaultUrl: "/images/hero.jpg",
+    },
+  ];
+
   return (
     <div className="space-y-8">
+      {/* Top Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <PageHeader
-          title="Media & Downloadable Buttons"
-          description="Manage website images, upload PDF brochures and attach downloadable documents directly to site buttons."
+          title="Media, Images & Downloadable Files"
+          description="Upload and delete images or PDFs, swap website visuals, and configure downloadable brochures on site buttons."
         />
         <div className="flex items-center gap-3">
           <button
@@ -205,7 +415,7 @@ export default function MediaManager({
             className="btn btn-dark inline-flex items-center gap-2"
           >
             <Upload className="h-4 w-4" />
-            <span>Add Image / PDF</span>
+            <span>Upload Image or PDF</span>
           </button>
         </div>
       </div>
@@ -222,7 +432,19 @@ export default function MediaManager({
           }`}
         >
           <ImageIcon className="h-4 w-4" />
-          <span>Images &amp; Files Library ({items.length})</span>
+          <span>Files Library ({items.length})</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("site-images")}
+          className={`flex items-center gap-2 border-b-2 px-6 py-3 font-display text-sm uppercase tracking-[0.16em] transition-colors ${
+            activeTab === "site-images"
+              ? "border-navy-900 text-navy-900 font-semibold"
+              : "border-transparent text-stone hover:text-navy-900"
+          }`}
+        >
+          <Sliders className="h-4 w-4" />
+          <span>Change Site Images</span>
         </button>
         <button
           type="button"
@@ -238,7 +460,9 @@ export default function MediaManager({
         </button>
       </div>
 
+      {/* ========================================================================= */}
       {/* TAB 1: Media Library */}
+      {/* ========================================================================= */}
       {activeTab === "library" && (
         <div className="space-y-6">
           {/* Filter Bar */}
@@ -264,7 +488,7 @@ export default function MediaManager({
                     : "bg-stone/10 text-navy-900 hover:bg-stone/20"
                 }`}
               >
-                Images ({items.filter((i) => i.category === "image").length})
+                Images ({imageList.length})
               </button>
               <button
                 type="button"
@@ -275,169 +499,182 @@ export default function MediaManager({
                     : "bg-stone/10 text-navy-900 hover:bg-stone/20"
                 }`}
               >
-                PDF Documents ({items.filter((i) => i.category === "pdf").length})
+                PDFs ({pdfList.length})
               </button>
             </div>
-
-            <div className="w-full sm:w-72">
+            <div className="relative">
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by title, filename or URL..."
-                className="field-input py-1.5 text-xs"
+                placeholder="Search by name, alt or URL..."
+                className="w-full sm:w-72 border border-navy-900/20 px-3 py-1.5 text-xs focus:border-navy-900 focus:outline-hidden"
               />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-stone hover:text-navy-900"
+                >
+                  ✕
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Media Grid */}
+          {/* Media Items Grid */}
           {filteredItems.length === 0 ? (
-            <div className="border border-dashed border-navy-900/20 bg-white p-12 text-center">
-              <ImageIcon className="mx-auto h-10 w-10 text-stone/50 mb-3" />
-              <p className="font-display text-lg text-navy-900">No media found</p>
-              <p className="mt-1 text-xs text-stone">
-                Upload images or PDF brochures to make them accessible across your website.
+            <div className="bg-white p-12 text-center border border-dashed border-navy-900/20">
+              <Upload className="mx-auto h-10 w-10 text-stone/50 mb-3" />
+              <p className="font-display text-sm font-semibold uppercase tracking-wider text-navy-900">
+                No matching media files found
+              </p>
+              <p className="text-xs text-stone mt-1">
+                {search ? "Try adjusting your search query." : "Upload your first image or PDF document."}
               </p>
               <button
                 type="button"
                 onClick={() => setShowUploadModal(true)}
-                className="btn btn-dark mt-5 text-xs inline-flex items-center gap-2"
+                className="btn btn-dark text-xs mt-4 inline-flex items-center gap-1.5"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>Upload New File</span>
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {filteredItems.map((item) => {
                 const isPdf = item.category === "pdf" || item.url.endsWith(".pdf");
                 return (
                   <div
                     key={item.id}
-                    className="group flex flex-col justify-between border border-navy-900/10 bg-white overflow-hidden shadow-xs hover:border-navy-900/30 transition-all"
+                    className="group relative flex flex-col bg-white border border-navy-900/10 transition-shadow hover:shadow-md"
                   >
-                    {/* Visual Area */}
-                    <div className="relative h-44 w-full bg-navy-950/5 flex items-center justify-center overflow-hidden border-b border-navy-900/5">
+                    {/* Thumbnail / Header */}
+                    <div className="relative h-44 w-full overflow-hidden bg-navy-950/5 flex items-center justify-center">
                       {isPdf ? (
-                        <div className="flex flex-col items-center justify-center p-4 text-center">
-                          <div className="rounded-full bg-red-100 p-3 text-red-700 mb-2">
-                            <FileText className="h-8 w-8" />
-                          </div>
-                          <span className="text-xs font-semibold text-navy-900 line-clamp-1">
-                            {item.originalName}
-                          </span>
-                          <span className="text-[10px] text-stone mt-0.5">
-                            {formatBytes(item.sizeBytes)} · PDF
+                        <div className="flex flex-col items-center justify-center text-center p-4">
+                          <FileText className="h-14 w-14 text-red-600 mb-2 transition-transform group-hover:scale-105" />
+                          <span className="inline-block bg-red-100 text-red-800 text-[10px] font-bold px-2 py-0.5 rounded-xs uppercase tracking-wider">
+                            PDF Document
                           </span>
                         </div>
                       ) : (
-                        <div
-                          className="relative h-full w-full cursor-pointer group-hover:scale-105 transition-transform duration-500"
-                          onClick={() => setPreviewItem(item)}
-                        >
-                          <Image
-                            src={item.url}
-                            alt={item.altText || item.originalName}
-                            fill
-                            sizes="(max-width: 640px) 100vw, 320px"
-                            className="object-cover"
-                          />
-                        </div>
+                        <Image
+                          src={item.url}
+                          alt={item.altText || item.originalName}
+                          fill
+                          className="object-cover transition-transform duration-500 group-hover:scale-105"
+                          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                        />
                       )}
 
-                      {/* Category Badge */}
-                      <span
-                        className={`absolute top-2 left-2 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white ${
-                          isPdf ? "bg-red-700" : "bg-navy-900"
-                        }`}
-                      >
-                        {isPdf ? "PDF" : "IMAGE"}
-                      </span>
-
-                      {/* Action overlays */}
-                      <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-navy-950/60 p-1 backdrop-blur-xs">
-                        {isPdf ? (
-                          <a
-                            href={item.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-1.5 text-white hover:text-teal-300 transition-colors"
-                            title="Open in new tab"
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </a>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => setPreviewItem(item)}
-                            className="p-1.5 text-white hover:text-teal-300 transition-colors"
-                            title="View full resolution"
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                          </button>
-                        )}
+                      {/* Top Action Badges */}
+                      <div className="absolute top-2 right-2 flex items-center gap-1">
                         <button
                           type="button"
-                          onClick={() => setDeleteTarget(item)}
-                          className="p-1.5 text-white hover:text-red-400 transition-colors"
-                          title="Remove file"
+                          onClick={() => copyUrl(item)}
+                          className="rounded-xs bg-navy-950/80 p-1.5 text-white hover:bg-navy-900 transition-colors"
+                          title="Copy file URL"
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          {copiedId === item.id ? (
+                            <Check className="h-3.5 w-3.5 text-teal-400" />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5" />
+                          )}
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => openReplaceModal(item)}
+                          className="rounded-xs bg-navy-950/80 p-1.5 text-white hover:bg-navy-900 transition-colors"
+                          title="Change / Replace file"
+                        >
+                          <RefreshCw className="h-3.5 w-3.5 text-amber-300" />
+                        </button>
+                      </div>
+
+                      {/* Category Badge */}
+                      <div className="absolute bottom-2 left-2">
+                        <span className="bg-navy-950/80 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white">
+                          {isPdf ? "PDF" : "IMAGE"}
+                        </span>
                       </div>
                     </div>
 
-                    {/* Metadata Area */}
-                    <div className="p-4 flex-1 flex flex-col justify-between">
+                    {/* Metadata & Actions */}
+                    <div className="flex flex-1 flex-col justify-between p-3.5">
                       <div>
-                        <h4
-                          className="font-sans text-xs font-semibold text-navy-900 line-clamp-1"
-                          title={item.originalName}
-                        >
-                          {item.originalName}
-                        </h4>
-                        <p
-                          className="mt-1 font-mono text-[10px] text-stone line-clamp-1 select-all"
-                          title={item.url}
-                        >
+                        <div className="flex items-start justify-between gap-2">
+                          <h4
+                            className="font-medium text-xs text-navy-900 truncate"
+                            title={item.originalName}
+                          >
+                            {item.originalName}
+                          </h4>
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(item)}
+                            className="text-stone hover:text-navy-900 p-0.5"
+                            title="Edit Title & Alt text"
+                          >
+                            <Edit2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <p className="text-[10px] text-stone mt-1 truncate font-mono">
                           {item.url}
                         </p>
+                        {item.altText && (
+                          <p className="text-[10px] text-stone/80 mt-1 line-clamp-1 italic">
+                            &ldquo;{item.altText}&rdquo;
+                          </p>
+                        )}
+                        <div className="mt-2 text-[10px] text-stone/70">
+                          {formatBytes(item.sizeBytes)}
+                        </div>
                       </div>
 
-                      <div className="mt-4 pt-3 border-t border-navy-900/5 flex items-center justify-between text-[11px]">
-                        <span className="text-stone">
-                          {formatBytes(item.sizeBytes)}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          {isPdf && (
+                      {/* Bottom Button Bar */}
+                      <div className="mt-3.5 pt-2.5 border-t border-navy-900/10 flex items-center justify-between gap-1 text-[11px]">
+                        <div className="flex items-center gap-1.5">
+                          {isPdf ? (
                             <a
                               href={item.url}
                               download
-                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-teal-800 hover:text-teal-900"
+                              className="text-stone hover:text-navy-900 inline-flex items-center gap-1"
                               title="Download PDF"
                             >
-                              <Download className="h-3 w-3" />
-                              <span>Download</span>
+                              <Download className="h-3.5 w-3.5" />
+                              <span>Save</span>
                             </a>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setPreviewItem(item)}
+                              className="text-stone hover:text-navy-900 inline-flex items-center gap-1"
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                              <span>View</span>
+                            </button>
                           )}
                           <button
                             type="button"
-                            onClick={() => copyUrl(item)}
-                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-navy-900 hover:text-ocean-600"
+                            onClick={() => openReplaceModal(item)}
+                            className="text-stone hover:text-navy-900 inline-flex items-center gap-1"
+                            title="Swap this file for a new image or PDF"
                           >
-                            {copiedId === item.id ? (
-                              <>
-                                <Check className="h-3 w-3 text-emerald-600" />
-                                <span className="text-emerald-700">Copied!</span>
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="h-3 w-3" />
-                                <span>Copy Link</span>
-                              </>
-                            )}
+                            <RefreshCw className="h-3 w-3 text-amber-600" />
+                            <span>Change</span>
                           </button>
                         </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(item)}
+                          className="text-red-700 hover:text-red-900 p-1"
+                          title="Delete file"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -448,434 +685,892 @@ export default function MediaManager({
         </div>
       )}
 
-      {/* TAB 2: Downloadable PDF Buttons Configuration */}
-      {activeTab === "buttons" && (
-        <form onSubmit={handleSaveConfig} className="space-y-8">
-          <div className="border border-navy-900/10 bg-white p-7">
-            <div className="flex items-center justify-between">
+      {/* ========================================================================= */}
+      {/* TAB 2: Site Visual Images Customizer */}
+      {/* ========================================================================= */}
+      {activeTab === "site-images" && (
+        <form onSubmit={handleSaveSiteImages} className="space-y-6">
+          <div className="bg-white p-6 border border-navy-900/10">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 mb-6 border-b border-navy-900/10 gap-3">
               <div>
-                <p className="eyebrow text-[0.65rem] text-stone">Website Buttons</p>
-                <h2 className="font-display mt-2 text-2xl font-light text-navy-900">
-                  Attach Downloadable PDF Files in Buttons
-                </h2>
-                <p className="mt-2 max-w-2xl text-sm text-stone leading-relaxed">
-                  Turn primary website buttons into downloadable PDF actions (or show secondary download buttons beside them). When clicked by visitors, the browser immediately saves the attached document.
+                <h3 className="font-display text-sm font-semibold uppercase tracking-[0.16em] text-navy-900">
+                  Website Visual Section Images
+                </h3>
+                <p className="text-xs text-stone mt-1">
+                  Change the active background images, headers, and media banners across the live site. Click &ldquo;Change Image&rdquo; on any section to select a replacement from your library or upload a new photo.
                 </p>
               </div>
-              <div className="hidden sm:flex items-center gap-2 text-xs bg-teal-50 text-teal-900 px-3 py-2 border border-teal-200">
-                <Sparkles className="h-4 w-4 text-teal-700" />
-                <span>Instant client-side downloads via HTML5 download attribute</span>
+              <div className="flex items-center gap-3">
+                <button
+                  type="submit"
+                  disabled={siteImagesSaving}
+                  className="btn btn-dark inline-flex items-center gap-2"
+                >
+                  {siteImagesSaving ? <Spinner className="text-ivory" /> : null}
+                  <span>Save Site Images</span>
+                </button>
               </div>
             </div>
 
-            <div className="mt-8 space-y-8 divide-y divide-navy-900/10">
-              {/* 1. Yacht Section Button */}
-              <div className="pt-6 first:pt-0">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h3 className="font-display text-lg text-navy-900">
-                      1. Finch 65 Yacht Profile Section
-                    </h3>
-                    <p className="text-xs text-stone">
-                      Appears next to the &quot;Charter Finch 65&quot; booking button in the yacht specifications section.
-                    </p>
-                  </div>
-                  <label className="checkbox-row cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={config.yachtButton.enabled}
-                      onChange={(e) =>
-                        setConfig({
-                          ...config,
-                          yachtButton: {
-                            ...config.yachtButton,
-                            enabled: e.target.checked,
-                          },
-                        })
-                      }
-                    />
-                    <span className="text-sm font-semibold text-navy-900">
-                      Enable Downloadable PDF Button
-                    </span>
-                  </label>
-                </div>
-
-                {config.yachtButton.enabled && (
-                  <div className="mt-4 grid gap-4 bg-navy-950/5 p-5 sm:grid-cols-2">
-                    <div>
-                      <label className="field-label" htmlFor="yacht-btn-text">
-                        Button Label
-                      </label>
-                      <input
-                        id="yacht-btn-text"
-                        type="text"
-                        className="field-input"
-                        value={config.yachtButton.buttonText}
-                        onChange={(e) =>
-                          setConfig({
-                            ...config,
-                            yachtButton: {
-                              ...config.yachtButton,
-                              buttonText: e.target.value,
-                            },
-                          })
-                        }
-                        placeholder="Download Yacht Specs & Rates (PDF)"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="field-label" htmlFor="yacht-pdf-url">
-                        Attached Downloadable PDF File
-                      </label>
-                      <select
-                        id="yacht-pdf-url"
-                        className="field-input"
-                        value={config.yachtButton.pdfUrl}
-                        onChange={(e) =>
-                          setConfig({
-                            ...config,
-                            yachtButton: {
-                              ...config.yachtButton,
-                              pdfUrl: e.target.value,
-                            },
-                          })
-                        }
-                      >
-                        {pdfList.map((pdf) => (
-                          <option key={pdf.id} value={pdf.url}>
-                            {pdf.originalName} ({pdf.url})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="field-label" htmlFor="yacht-pdf-label">
-                        Document Tooltip / Description
-                      </label>
-                      <input
-                        id="yacht-pdf-label"
-                        type="text"
-                        className="field-input"
-                        value={config.yachtButton.pdfLabel}
-                        onChange={(e) =>
-                          setConfig({
-                            ...config,
-                            yachtButton: {
-                              ...config.yachtButton,
-                              pdfLabel: e.target.value,
-                            },
-                          })
-                        }
-                        placeholder="Finch 65 Specifications Brochure"
-                      />
-                    </div>
-                  </div>
-                )}
+            {siteImagesSaved && (
+              <div className="mb-6 flex items-center gap-2 border border-emerald-300 bg-emerald-50 p-3 text-xs text-emerald-800">
+                <CheckCircle2 className="h-4 w-4 flex-none text-emerald-600" />
+                <span>Site images updated successfully! The live website is revalidated.</span>
               </div>
+            )}
 
-              {/* 2. Food & Dining Menu Button */}
-              <div className="pt-6">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h3 className="font-display text-lg text-navy-900">
-                      2. Food &amp; Dining Menu Section
-                    </h3>
-                    <p className="text-xs text-stone">
-                      Appears alongside &quot;Explore Our Menu&quot; and inside the culinary modal dialog.
-                    </p>
-                  </div>
-                  <label className="checkbox-row cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={config.menuButton.enabled}
-                      onChange={(e) =>
-                        setConfig({
-                          ...config,
-                          menuButton: {
-                            ...config.menuButton,
-                            enabled: e.target.checked,
-                          },
-                        })
-                      }
-                    />
-                    <span className="text-sm font-semibold text-navy-900">
-                      Enable Downloadable PDF Button
-                    </span>
-                  </label>
-                </div>
-
-                {config.menuButton.enabled && (
-                  <div className="mt-4 grid gap-4 bg-navy-950/5 p-5 sm:grid-cols-2">
-                    <div>
-                      <label className="field-label" htmlFor="menu-btn-text">
-                        Button Label
-                      </label>
-                      <input
-                        id="menu-btn-text"
-                        type="text"
-                        className="field-input"
-                        value={config.menuButton.buttonText}
-                        onChange={(e) =>
-                          setConfig({
-                            ...config,
-                            menuButton: {
-                              ...config.menuButton,
-                              buttonText: e.target.value,
-                            },
-                          })
-                        }
-                        placeholder="Download Dining Menu (PDF)"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="field-label" htmlFor="menu-pdf-url">
-                        Attached Downloadable PDF File
-                      </label>
-                      <select
-                        id="menu-pdf-url"
-                        className="field-input"
-                        value={config.menuButton.pdfUrl}
-                        onChange={(e) =>
-                          setConfig({
-                            ...config,
-                            menuButton: {
-                              ...config.menuButton,
-                              pdfUrl: e.target.value,
-                            },
-                          })
-                        }
-                      >
-                        {pdfList.map((pdf) => (
-                          <option key={pdf.id} value={pdf.url}>
-                            {pdf.originalName} ({pdf.url})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <label className="field-label" htmlFor="menu-pdf-label">
-                        Document Tooltip / Description
-                      </label>
-                      <input
-                        id="menu-pdf-label"
-                        type="text"
-                        className="field-input"
-                        value={config.menuButton.pdfLabel}
-                        onChange={(e) =>
-                          setConfig({
-                            ...config,
-                            menuButton: {
-                              ...config.menuButton,
-                              pdfLabel: e.target.value,
-                            },
-                          })
-                        }
-                        placeholder="Salt Republic Dining & Beverage Menu"
-                      />
-                    </div>
-                  </div>
-                )}
+            {siteImagesError && (
+              <div className="mb-6 flex items-center gap-2 border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                <AlertCircle className="h-4 w-4 flex-none" />
+                <span>{siteImagesError}</span>
               </div>
+            )}
 
-              {/* 3. Hero Rates Button */}
-              <div className="pt-6">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h3 className="font-display text-lg text-navy-900">
-                      3. Hero Banner Rates Button
-                    </h3>
-                    <p className="text-xs text-stone">
-                      Appears beside &quot;Book Your Trip&quot; in the hero intro banner at the top of the homepage.
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {siteSectionDefinitions.map((section) => {
+                const currentUrl = siteImages[section.key] || section.defaultUrl;
+                return (
+                  <div
+                    key={section.key}
+                    className="flex flex-col border border-navy-900/10 bg-[#fafafa] p-4 transition-shadow hover:shadow-xs"
+                  >
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-teal-700">
+                          {section.location}
+                        </span>
+                        <h4 className="font-display text-sm font-semibold text-navy-900 mt-0.5">
+                          {section.title}
+                        </h4>
+                      </div>
+                      <span className="text-[9px] font-mono text-stone bg-stone/10 px-2 py-0.5">
+                        {section.aspectHint}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-stone leading-relaxed mb-3">
+                      {section.description}
                     </p>
-                  </div>
-                  <label className="checkbox-row cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={config.heroButton.enabled}
-                      onChange={(e) =>
-                        setConfig({
-                          ...config,
-                          heroButton: {
-                            ...config.heroButton,
-                            enabled: e.target.checked,
-                          },
-                        })
-                      }
-                    />
-                    <span className="text-sm font-semibold text-navy-900">
-                      Enable Downloadable Rates Button
-                    </span>
-                  </label>
-                </div>
 
-                {config.heroButton.enabled && (
-                  <div className="mt-4 grid gap-4 bg-navy-950/5 p-5 sm:grid-cols-2">
-                    <div>
-                      <label className="field-label" htmlFor="hero-btn-text">
-                        Button Label
-                      </label>
-                      <input
-                        id="hero-btn-text"
-                        type="text"
-                        className="field-input"
-                        value={config.heroButton.buttonText}
-                        onChange={(e) =>
-                          setConfig({
-                            ...config,
-                            heroButton: {
-                              ...config.heroButton,
-                              buttonText: e.target.value,
-                            },
-                          })
-                        }
-                        placeholder="Download Rates (PDF)"
-                        required
+                    {/* Preview Image */}
+                    <div className="relative h-48 w-full overflow-hidden bg-navy-950/10 border border-navy-900/10 mb-3">
+                      <Image
+                        src={currentUrl}
+                        alt={section.title}
+                        fill
+                        className="object-cover"
+                        sizes="(max-width: 768px) 100vw, 50vw"
                       />
+                      <div className="absolute bottom-2 left-2 bg-navy-950/80 px-2 py-1 text-[10px] font-mono text-white max-w-[90%] truncate">
+                        {currentUrl}
+                      </div>
                     </div>
-                    <div>
-                      <label className="field-label" htmlFor="hero-pdf-url">
-                        Attached Downloadable PDF File
-                      </label>
-                      <select
-                        id="hero-pdf-url"
-                        className="field-input"
-                        value={config.heroButton.pdfUrl}
-                        onChange={(e) =>
-                          setConfig({
-                            ...config,
-                            heroButton: {
-                              ...config.heroButton,
-                              pdfUrl: e.target.value,
-                            },
-                          })
-                        }
-                      >
-                        {pdfList.map((pdf) => (
-                          <option key={pdf.id} value={pdf.url}>
-                            {pdf.originalName} ({pdf.url})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                )}
-              </div>
 
-              {/* 4. Header Navigation Button */}
-              <div className="pt-6">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h3 className="font-display text-lg text-navy-900">
-                      4. Navigation Header Brochure Button
-                    </h3>
-                    <p className="text-xs text-stone">
-                      Appears in the desktop and mobile navigation header next to &quot;Book Now&quot;.
-                    </p>
-                  </div>
-                  <label className="checkbox-row cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={config.headerButton.enabled}
-                      onChange={(e) =>
-                        setConfig({
-                          ...config,
-                          headerButton: {
-                            ...config.headerButton,
-                            enabled: e.target.checked,
-                          },
-                        })
-                      }
-                    />
-                    <span className="text-sm font-semibold text-navy-900">
-                      Enable Header Brochure Button
-                    </span>
-                  </label>
-                </div>
-
-                {config.headerButton.enabled && (
-                  <div className="mt-4 grid gap-4 bg-navy-950/5 p-5 sm:grid-cols-2">
-                    <div>
-                      <label className="field-label" htmlFor="header-btn-text">
-                        Button Label
-                      </label>
-                      <input
-                        id="header-btn-text"
-                        type="text"
-                        className="field-input"
-                        value={config.headerButton.buttonText}
-                        onChange={(e) =>
-                          setConfig({
-                            ...config,
-                            headerButton: {
-                              ...config.headerButton,
-                              buttonText: e.target.value,
-                            },
-                          })
-                        }
-                        placeholder="Brochure (PDF)"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="field-label" htmlFor="header-pdf-url">
-                        Attached Downloadable PDF File
-                      </label>
-                      <select
-                        id="header-pdf-url"
-                        className="field-input"
-                        value={config.headerButton.pdfUrl}
-                        onChange={(e) =>
-                          setConfig({
-                            ...config,
-                            headerButton: {
-                              ...config.headerButton,
-                              pdfUrl: e.target.value,
-                            },
-                          })
-                        }
+                    {/* Actions */}
+                    <div className="mt-auto pt-2 flex items-center justify-between gap-2 border-t border-navy-900/10">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSiteImageTargetKey(section.key);
+                            setShowImagePicker(true);
+                          }}
+                          className="btn btn-dark text-xs py-1.5 px-3 inline-flex items-center gap-1.5"
+                        >
+                          <FolderOpen className="h-3 w-3" />
+                          <span>Change Image</span>
+                        </button>
+                        {currentUrl !== section.defaultUrl && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setSiteImages((prev) => ({
+                                ...prev,
+                                [section.key]: section.defaultUrl,
+                              }))
+                            }
+                            className="text-[11px] text-stone hover:text-navy-900 underline"
+                          >
+                            Reset
+                          </button>
+                        )}
+                      </div>
+                      <a
+                        href={currentUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-stone hover:text-navy-900 p-1"
+                        title="Open image in new tab"
                       >
-                        {pdfList.map((pdf) => (
-                          <option key={pdf.id} value={pdf.url}>
-                            {pdf.originalName} ({pdf.url})
-                          </option>
-                        ))}
-                      </select>
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
                     </div>
                   </div>
-                )}
-              </div>
+                );
+              })}
             </div>
 
-            <div className="mt-8 flex items-center gap-4 pt-6 border-t border-navy-900/10">
+            <div className="mt-8 flex justify-end gap-3 pt-4 border-t border-navy-900/10">
               <button
                 type="submit"
-                disabled={configSaving}
+                disabled={siteImagesSaving}
                 className="btn btn-dark inline-flex items-center gap-2"
               >
-                {configSaving ? <Spinner className="text-ivory" /> : null}
-                <span>Save Button Settings</span>
+                {siteImagesSaving ? <Spinner className="text-ivory" /> : null}
+                <span>Save Site Images</span>
               </button>
-              {configSaved && (
-                <span className="text-xs font-semibold text-emerald-700 animate-fade-in">
-                  Button settings saved and live on website!
-                </span>
-              )}
-              {configError && (
-                <span className="text-xs text-red-700">{configError}</span>
-              )}
             </div>
           </div>
         </form>
       )}
 
-      {/* Upload Modal */}
+      {/* ========================================================================= */}
+      {/* TAB 3: Downloadable PDF Buttons Manager */}
+      {/* ========================================================================= */}
+      {activeTab === "buttons" && (
+        <form onSubmit={handleSaveButtons} className="space-y-6">
+          <div className="bg-white p-6 border border-navy-900/10">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-4 mb-6 border-b border-navy-900/10 gap-3">
+              <div>
+                <h3 className="font-display text-sm font-semibold uppercase tracking-[0.16em] text-navy-900">
+                  Downloadable PDF Buttons Configuration
+                </h3>
+                <p className="text-xs text-stone mt-1">
+                  Attach downloadable PDF documents directly to website action buttons. When guests click these buttons, their browsers immediately trigger the file download.
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="submit"
+                  disabled={buttonSaving}
+                  className="btn btn-dark inline-flex items-center gap-2"
+                >
+                  {buttonSaving ? <Spinner className="text-ivory" /> : null}
+                  <span>Save Button Settings</span>
+                </button>
+              </div>
+            </div>
+
+            {buttonSaved && (
+              <div className="mb-6 flex items-center gap-2 border border-emerald-300 bg-emerald-50 p-3 text-xs text-emerald-800">
+                <CheckCircle2 className="h-4 w-4 flex-none text-emerald-600" />
+                <span>Button download configurations saved and revalidated across all marketing pages!</span>
+              </div>
+            )}
+
+            {buttonError && (
+              <div className="mb-6 flex items-center gap-2 border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                <AlertCircle className="h-4 w-4 flex-none" />
+                <span>{buttonError}</span>
+              </div>
+            )}
+
+            <div className="space-y-6">
+              {/* BUTTON 1: Homepage Hero Button */}
+              <div className="border border-navy-900/10 p-5 bg-[#fafafa]">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 mb-4 border-b border-navy-900/10">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-teal-700">
+                      Homepage (Section 01 Hero)
+                    </span>
+                    <h4 className="font-display text-sm font-semibold text-navy-900">
+                      Hero Section Download Button
+                    </h4>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={buttonConfig.heroButton.enabled}
+                      onChange={(e) =>
+                        setButtonConfig({
+                          ...buttonConfig,
+                          heroButton: {
+                            ...buttonConfig.heroButton,
+                            enabled: e.target.checked,
+                          },
+                        })
+                      }
+                      className="h-4 w-4 rounded-xs border-navy-900/20 text-navy-900 focus:ring-navy-900"
+                    />
+                    <span className="text-xs font-medium text-navy-900">
+                      Show in Hero
+                    </span>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="field-label">Button Label</label>
+                    <input
+                      type="text"
+                      value={buttonConfig.heroButton.buttonText}
+                      onChange={(e) =>
+                        setButtonConfig({
+                          ...buttonConfig,
+                          heroButton: {
+                            ...buttonConfig.heroButton,
+                            buttonText: e.target.value,
+                          },
+                        })
+                      }
+                      className="field-input text-xs"
+                      placeholder="e.g. Download Rates (PDF)"
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label">Select Attached PDF File</label>
+                    <div className="flex gap-2">
+                      <select
+                        value={buttonConfig.heroButton.pdfUrl}
+                        onChange={(e) =>
+                          setButtonConfig({
+                            ...buttonConfig,
+                            heroButton: {
+                              ...buttonConfig.heroButton,
+                              pdfUrl: e.target.value,
+                            },
+                          })
+                        }
+                        className="field-input text-xs flex-1"
+                      >
+                        {pdfList.map((p) => (
+                          <option key={p.id} value={p.url}>
+                            {p.originalName} ({p.url})
+                          </option>
+                        ))}
+                      </select>
+                      {buttonConfig.heroButton.pdfUrl && (
+                        <a
+                          href={buttonConfig.heroButton.pdfUrl}
+                          download
+                          className="btn btn-outline text-xs px-2.5 inline-flex items-center gap-1"
+                          title="Test download"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3">
+                  <label className="field-label">PDF Download Title / Label</label>
+                  <input
+                    type="text"
+                    value={buttonConfig.heroButton.pdfLabel}
+                    onChange={(e) =>
+                      setButtonConfig({
+                        ...buttonConfig,
+                        heroButton: {
+                          ...buttonConfig.heroButton,
+                          pdfLabel: e.target.value,
+                        },
+                      })
+                    }
+                    className="field-input text-xs"
+                    placeholder="e.g. Salt Republic Full Packages & Rates Brochure"
+                  />
+                </div>
+              </div>
+
+              {/* BUTTON 2: Yacht Section Button */}
+              <div className="border border-navy-900/10 p-5 bg-[#fafafa]">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 mb-4 border-b border-navy-900/10">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-teal-700">
+                      Homepage (Section 04 The Vessel)
+                    </span>
+                    <h4 className="font-display text-sm font-semibold text-navy-900">
+                      Finch 65 Yacht Specifications Button
+                    </h4>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={buttonConfig.yachtButton.enabled}
+                      onChange={(e) =>
+                        setButtonConfig({
+                          ...buttonConfig,
+                          yachtButton: {
+                            ...buttonConfig.yachtButton,
+                            enabled: e.target.checked,
+                          },
+                        })
+                      }
+                      className="h-4 w-4 rounded-xs border-navy-900/20 text-navy-900 focus:ring-navy-900"
+                    />
+                    <span className="text-xs font-medium text-navy-900">
+                      Show in Yacht Section
+                    </span>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="field-label">Button Label</label>
+                    <input
+                      type="text"
+                      value={buttonConfig.yachtButton.buttonText}
+                      onChange={(e) =>
+                        setButtonConfig({
+                          ...buttonConfig,
+                          yachtButton: {
+                            ...buttonConfig.yachtButton,
+                            buttonText: e.target.value,
+                          },
+                        })
+                      }
+                      className="field-input text-xs"
+                      placeholder="e.g. Download Yacht Specs & Rates (PDF)"
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label">Select Attached PDF File</label>
+                    <div className="flex gap-2">
+                      <select
+                        value={buttonConfig.yachtButton.pdfUrl}
+                        onChange={(e) =>
+                          setButtonConfig({
+                            ...buttonConfig,
+                            yachtButton: {
+                              ...buttonConfig.yachtButton,
+                              pdfUrl: e.target.value,
+                            },
+                          })
+                        }
+                        className="field-input text-xs flex-1"
+                      >
+                        {pdfList.map((p) => (
+                          <option key={p.id} value={p.url}>
+                            {p.originalName} ({p.url})
+                          </option>
+                        ))}
+                      </select>
+                      {buttonConfig.yachtButton.pdfUrl && (
+                        <a
+                          href={buttonConfig.yachtButton.pdfUrl}
+                          download
+                          className="btn btn-outline text-xs px-2.5 inline-flex items-center gap-1"
+                          title="Test download"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3">
+                  <label className="field-label">PDF Download Title / Label</label>
+                  <input
+                    type="text"
+                    value={buttonConfig.yachtButton.pdfLabel}
+                    onChange={(e) =>
+                      setButtonConfig({
+                        ...buttonConfig,
+                        yachtButton: {
+                          ...buttonConfig.yachtButton,
+                          pdfLabel: e.target.value,
+                        },
+                      })
+                    }
+                    className="field-input text-xs"
+                    placeholder="e.g. Finch 65 Specifications & Charter Rates"
+                  />
+                </div>
+              </div>
+
+              {/* BUTTON 3: Food & Dining Section Button */}
+              <div className="border border-navy-900/10 p-5 bg-[#fafafa]">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 mb-4 border-b border-navy-900/10">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-teal-700">
+                      Homepage (Section 06 Food & Dining)
+                    </span>
+                    <h4 className="font-display text-sm font-semibold text-navy-900">
+                      Dining &amp; Beverage Menu Button
+                    </h4>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={buttonConfig.menuButton.enabled}
+                      onChange={(e) =>
+                        setButtonConfig({
+                          ...buttonConfig,
+                          menuButton: {
+                            ...buttonConfig.menuButton,
+                            enabled: e.target.checked,
+                          },
+                        })
+                      }
+                      className="h-4 w-4 rounded-xs border-navy-900/20 text-navy-900 focus:ring-navy-900"
+                    />
+                    <span className="text-xs font-medium text-navy-900">
+                      Show in Food Menu
+                    </span>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="field-label">Button Label</label>
+                    <input
+                      type="text"
+                      value={buttonConfig.menuButton.buttonText}
+                      onChange={(e) =>
+                        setButtonConfig({
+                          ...buttonConfig,
+                          menuButton: {
+                            ...buttonConfig.menuButton,
+                            buttonText: e.target.value,
+                          },
+                        })
+                      }
+                      className="field-input text-xs"
+                      placeholder="e.g. Download Dining Menu (PDF)"
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label">Select Attached PDF File</label>
+                    <div className="flex gap-2">
+                      <select
+                        value={buttonConfig.menuButton.pdfUrl}
+                        onChange={(e) =>
+                          setButtonConfig({
+                            ...buttonConfig,
+                            menuButton: {
+                              ...buttonConfig.menuButton,
+                              pdfUrl: e.target.value,
+                            },
+                          })
+                        }
+                        className="field-input text-xs flex-1"
+                      >
+                        {pdfList.map((p) => (
+                          <option key={p.id} value={p.url}>
+                            {p.originalName} ({p.url})
+                          </option>
+                        ))}
+                      </select>
+                      {buttonConfig.menuButton.pdfUrl && (
+                        <a
+                          href={buttonConfig.menuButton.pdfUrl}
+                          download
+                          className="btn btn-outline text-xs px-2.5 inline-flex items-center gap-1"
+                          title="Test download"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3">
+                  <label className="field-label">PDF Download Title / Label</label>
+                  <input
+                    type="text"
+                    value={buttonConfig.menuButton.pdfLabel}
+                    onChange={(e) =>
+                      setButtonConfig({
+                        ...buttonConfig,
+                        menuButton: {
+                          ...buttonConfig.menuButton,
+                          pdfLabel: e.target.value,
+                        },
+                      })
+                    }
+                    className="field-input text-xs"
+                    placeholder="e.g. Salt Republic Dining & Beverage Menu"
+                  />
+                </div>
+              </div>
+
+              {/* BUTTON 4: Top Header Nav Action */}
+              <div className="border border-navy-900/10 p-5 bg-[#fafafa]">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 mb-4 border-b border-navy-900/10">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-teal-700">
+                      Global Navigation Header
+                    </span>
+                    <h4 className="font-display text-sm font-semibold text-navy-900">
+                      Top Header Brochure Link
+                    </h4>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={buttonConfig.headerButton.enabled}
+                      onChange={(e) =>
+                        setButtonConfig({
+                          ...buttonConfig,
+                          headerButton: {
+                            ...buttonConfig.headerButton,
+                            enabled: e.target.checked,
+                          },
+                        })
+                      }
+                      className="h-4 w-4 rounded-xs border-navy-900/20 text-navy-900 focus:ring-navy-900"
+                    />
+                    <span className="text-xs font-medium text-navy-900">
+                      Show in Top Header
+                    </span>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="field-label">Header Link Text</label>
+                    <input
+                      type="text"
+                      value={buttonConfig.headerButton.buttonText}
+                      onChange={(e) =>
+                        setButtonConfig({
+                          ...buttonConfig,
+                          headerButton: {
+                            ...buttonConfig.headerButton,
+                            buttonText: e.target.value,
+                          },
+                        })
+                      }
+                      className="field-input text-xs"
+                      placeholder="e.g. Brochure (PDF)"
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label">Select Attached PDF File</label>
+                    <div className="flex gap-2">
+                      <select
+                        value={buttonConfig.headerButton.pdfUrl}
+                        onChange={(e) =>
+                          setButtonConfig({
+                            ...buttonConfig,
+                            headerButton: {
+                              ...buttonConfig.headerButton,
+                              pdfUrl: e.target.value,
+                            },
+                          })
+                        }
+                        className="field-input text-xs flex-1"
+                      >
+                        {pdfList.map((p) => (
+                          <option key={p.id} value={p.url}>
+                            {p.originalName} ({p.url})
+                          </option>
+                        ))}
+                      </select>
+                      {buttonConfig.headerButton.pdfUrl && (
+                        <a
+                          href={buttonConfig.headerButton.pdfUrl}
+                          download
+                          className="btn btn-outline text-xs px-2.5 inline-flex items-center gap-1"
+                          title="Test download"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3">
+                  <label className="field-label">PDF Download Title / Label</label>
+                  <input
+                    type="text"
+                    value={buttonConfig.headerButton.pdfLabel}
+                    onChange={(e) =>
+                      setButtonConfig({
+                        ...buttonConfig,
+                        headerButton: {
+                          ...buttonConfig.headerButton,
+                          pdfLabel: e.target.value,
+                        },
+                      })
+                    }
+                    className="field-input text-xs"
+                    placeholder="e.g. Salt Republic Luxury Charter Brochure"
+                  />
+                </div>
+              </div>
+
+              {/* BUTTON 5: B2B Travel Agent Portal Button */}
+              <div className="border border-navy-900/10 p-5 bg-[#fafafa]">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 mb-4 border-b border-navy-900/10">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-teal-700">
+                      Travel Agent Portal (/travel-agents)
+                    </span>
+                    <h4 className="font-display text-sm font-semibold text-navy-900">
+                      B2B Partner Tariff &amp; Factsheet Button
+                    </h4>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={buttonConfig.b2bButton?.enabled ?? false}
+                      onChange={(e) =>
+                        setButtonConfig({
+                          ...buttonConfig,
+                          b2bButton: {
+                            ...(buttonConfig.b2bButton || {
+                              enabled: false,
+                              buttonText: "Download B2B Tariff Sheet (PDF)",
+                              pdfUrl: "/packages/salt-republic-rates-and-packages.pdf",
+                              pdfLabel: "Salt Republic Travel Agent Tariff & Factsheet",
+                            }),
+                            enabled: e.target.checked,
+                          },
+                        })
+                      }
+                      className="h-4 w-4 rounded-xs border-navy-900/20 text-navy-900 focus:ring-navy-900"
+                    />
+                    <span className="text-xs font-medium text-navy-900">
+                      Show in Travel Agent Portal
+                    </span>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="field-label">Button Label</label>
+                    <input
+                      type="text"
+                      value={buttonConfig.b2bButton?.buttonText ?? "Download B2B Tariff Sheet (PDF)"}
+                      onChange={(e) =>
+                        setButtonConfig({
+                          ...buttonConfig,
+                          b2bButton: {
+                            ...(buttonConfig.b2bButton || {
+                              enabled: true,
+                              buttonText: "",
+                              pdfUrl: "/packages/salt-republic-rates-and-packages.pdf",
+                              pdfLabel: "",
+                            }),
+                            buttonText: e.target.value,
+                          },
+                        })
+                      }
+                      className="field-input text-xs"
+                      placeholder="e.g. Download B2B Tariff Sheet (PDF)"
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label">Select Attached PDF File</label>
+                    <div className="flex gap-2">
+                      <select
+                        value={buttonConfig.b2bButton?.pdfUrl ?? "/packages/salt-republic-rates-and-packages.pdf"}
+                        onChange={(e) =>
+                          setButtonConfig({
+                            ...buttonConfig,
+                            b2bButton: {
+                              ...(buttonConfig.b2bButton || {
+                                enabled: true,
+                                buttonText: "Download B2B Tariff Sheet (PDF)",
+                                pdfUrl: "",
+                                pdfLabel: "",
+                              }),
+                              pdfUrl: e.target.value,
+                            },
+                          })
+                        }
+                        className="field-input text-xs flex-1"
+                      >
+                        {pdfList.map((p) => (
+                          <option key={p.id} value={p.url}>
+                            {p.originalName} ({p.url})
+                          </option>
+                        ))}
+                      </select>
+                      {buttonConfig.b2bButton?.pdfUrl && (
+                        <a
+                          href={buttonConfig.b2bButton.pdfUrl}
+                          download
+                          className="btn btn-outline text-xs px-2.5 inline-flex items-center gap-1"
+                          title="Test download"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3">
+                  <label className="field-label">PDF Download Title / Label</label>
+                  <input
+                    type="text"
+                    value={buttonConfig.b2bButton?.pdfLabel ?? "Salt Republic Travel Agent Tariff & Factsheet"}
+                    onChange={(e) =>
+                      setButtonConfig({
+                        ...buttonConfig,
+                        b2bButton: {
+                          ...(buttonConfig.b2bButton || {
+                            enabled: true,
+                            buttonText: "Download B2B Tariff Sheet (PDF)",
+                            pdfUrl: "/packages/salt-republic-rates-and-packages.pdf",
+                            pdfLabel: "",
+                          }),
+                          pdfLabel: e.target.value,
+                        },
+                      })
+                    }
+                    className="field-input text-xs"
+                    placeholder="e.g. Salt Republic Travel Agent Tariff & Factsheet"
+                  />
+                </div>
+              </div>
+
+              {/* BUTTON 6: Final CTA Pre-Footer Button */}
+              <div className="border border-navy-900/10 p-5 bg-[#fafafa]">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 mb-4 border-b border-navy-900/10">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-teal-700">
+                      Homepage (Section 08 Pre-Footer CTA)
+                    </span>
+                    <h4 className="font-display text-sm font-semibold text-navy-900">
+                      Closing Call-To-Action Download Button
+                    </h4>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={buttonConfig.finalCtaButton?.enabled ?? false}
+                      onChange={(e) =>
+                        setButtonConfig({
+                          ...buttonConfig,
+                          finalCtaButton: {
+                            ...(buttonConfig.finalCtaButton || {
+                              enabled: false,
+                              buttonText: "Download Charter Brochure (PDF)",
+                              pdfUrl: "/packages/salt-republic-rates-and-packages.pdf",
+                              pdfLabel: "Salt Republic Luxury Charter Guide",
+                            }),
+                            enabled: e.target.checked,
+                          },
+                        })
+                      }
+                      className="h-4 w-4 rounded-xs border-navy-900/20 text-navy-900 focus:ring-navy-900"
+                    />
+                    <span className="text-xs font-medium text-navy-900">
+                      Show in Final CTA
+                    </span>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="field-label">Button Label</label>
+                    <input
+                      type="text"
+                      value={buttonConfig.finalCtaButton?.buttonText ?? "Download Charter Brochure (PDF)"}
+                      onChange={(e) =>
+                        setButtonConfig({
+                          ...buttonConfig,
+                          finalCtaButton: {
+                            ...(buttonConfig.finalCtaButton || {
+                              enabled: true,
+                              buttonText: "",
+                              pdfUrl: "/packages/salt-republic-rates-and-packages.pdf",
+                              pdfLabel: "",
+                            }),
+                            buttonText: e.target.value,
+                          },
+                        })
+                      }
+                      className="field-input text-xs"
+                      placeholder="e.g. Download Charter Brochure (PDF)"
+                    />
+                  </div>
+                  <div>
+                    <label className="field-label">Select Attached PDF File</label>
+                    <div className="flex gap-2">
+                      <select
+                        value={buttonConfig.finalCtaButton?.pdfUrl ?? "/packages/salt-republic-rates-and-packages.pdf"}
+                        onChange={(e) =>
+                          setButtonConfig({
+                            ...buttonConfig,
+                            finalCtaButton: {
+                              ...(buttonConfig.finalCtaButton || {
+                                enabled: true,
+                                buttonText: "Download Charter Brochure (PDF)",
+                                pdfUrl: "",
+                                pdfLabel: "",
+                              }),
+                              pdfUrl: e.target.value,
+                            },
+                          })
+                        }
+                        className="field-input text-xs flex-1"
+                      >
+                        {pdfList.map((p) => (
+                          <option key={p.id} value={p.url}>
+                            {p.originalName} ({p.url})
+                          </option>
+                        ))}
+                      </select>
+                      {buttonConfig.finalCtaButton?.pdfUrl && (
+                        <a
+                          href={buttonConfig.finalCtaButton.pdfUrl}
+                          download
+                          className="btn btn-outline text-xs px-2.5 inline-flex items-center gap-1"
+                          title="Test download"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3">
+                  <label className="field-label">PDF Download Title / Label</label>
+                  <input
+                    type="text"
+                    value={buttonConfig.finalCtaButton?.pdfLabel ?? "Salt Republic Luxury Charter Guide"}
+                    onChange={(e) =>
+                      setButtonConfig({
+                        ...buttonConfig,
+                        finalCtaButton: {
+                          ...(buttonConfig.finalCtaButton || {
+                            enabled: true,
+                            buttonText: "Download Charter Brochure (PDF)",
+                            pdfUrl: "/packages/salt-republic-rates-and-packages.pdf",
+                            pdfLabel: "",
+                          }),
+                          pdfLabel: e.target.value,
+                        },
+                      })
+                    }
+                    className="field-input text-xs"
+                    placeholder="e.g. Salt Republic Luxury Charter Guide"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 flex justify-end gap-3 pt-4 border-t border-navy-900/10">
+              <button
+                type="submit"
+                disabled={buttonSaving}
+                className="btn btn-dark inline-flex items-center gap-2"
+              >
+                {buttonSaving ? <Spinner className="text-ivory" /> : null}
+                <span>Save Button Settings</span>
+              </button>
+            </div>
+          </div>
+        </form>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 1: Upload New Media File (Image or PDF) */}
+      {/* ========================================================================= */}
       {showUploadModal && (
         <Modal
           open={showUploadModal}
           onClose={() => setShowUploadModal(false)}
-          title="Add New Media or PDF File"
+          title="Upload Image or PDF Document"
         >
           <div className="flex border-b border-navy-900/10 mb-5">
             <button
@@ -907,7 +1602,7 @@ export default function MediaManager({
           <form onSubmit={handleUpload} className="space-y-4">
             {uploadMode === "file" ? (
               <div>
-                <label className="field-label">Select Image or PDF</label>
+                <label className="field-label">Select File (Images or PDF)</label>
                 <div
                   onClick={() => fileInputRef.current?.click()}
                   className="cursor-pointer border-2 border-dashed border-navy-900/20 bg-stone/5 p-6 text-center hover:bg-stone/10 transition-colors"
@@ -921,7 +1616,7 @@ export default function MediaManager({
                   <p className="text-[10px] text-stone mt-1">
                     {selectedFile
                       ? `${formatBytes(selectedFile.size)} · Ready to upload`
-                      : "Supports images & downloadable PDF brochures"}
+                      : "Supports images for site sections & downloadable PDF brochures"}
                   </p>
                   <input
                     ref={fileInputRef}
@@ -942,7 +1637,7 @@ export default function MediaManager({
                   type="url"
                   value={urlInput}
                   onChange={(e) => setUrlInput(e.target.value)}
-                  placeholder="https://example.com/brochure.pdf"
+                  placeholder="https://example.com/rates-brochure.pdf"
                   className="field-input"
                   required
                 />
@@ -958,7 +1653,7 @@ export default function MediaManager({
                 type="text"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="e.g. Finch 65 Sunset Deck or Luxury Brochure"
+                placeholder="e.g. Sunset Lagoon Anchor or Luxury Brochure"
                 className="field-input"
                 required
               />
@@ -1005,7 +1700,211 @@ export default function MediaManager({
         </Modal>
       )}
 
-      {/* Delete Confirmation Modal */}
+      {/* ========================================================================= */}
+      {/* MODAL 2: Replace / Change File */}
+      {/* ========================================================================= */}
+      {replaceTarget && (
+        <Modal
+          open={!!replaceTarget}
+          onClose={() => setReplaceTarget(null)}
+          title="Change / Replace Media File"
+        >
+          <div className="mb-4 bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900 leading-relaxed">
+            Replacing <strong>{replaceTarget.originalName}</strong> will update the file content while keeping links intact. Any website sections referencing this file will show the new version.
+          </div>
+
+          <div className="flex border-b border-navy-900/10 mb-5">
+            <button
+              type="button"
+              onClick={() => setReplaceMode("file")}
+              className={`flex items-center gap-2 border-b-2 px-4 py-2 text-xs font-semibold uppercase tracking-wider ${
+                replaceMode === "file"
+                  ? "border-navy-900 text-navy-900"
+                  : "border-transparent text-stone hover:text-navy-900"
+              }`}
+            >
+              <Upload className="h-3.5 w-3.5" />
+              <span>Upload New File</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setReplaceMode("url")}
+              className={`flex items-center gap-2 border-b-2 px-4 py-2 text-xs font-semibold uppercase tracking-wider ${
+                replaceMode === "url"
+                  ? "border-navy-900 text-navy-900"
+                  : "border-transparent text-stone hover:text-navy-900"
+              }`}
+            >
+              <LinkIcon className="h-3.5 w-3.5" />
+              <span>Replace with URL</span>
+            </button>
+          </div>
+
+          <form onSubmit={handleReplace} className="space-y-4">
+            {replaceMode === "file" ? (
+              <div>
+                <label className="field-label">Select Replacement File</label>
+                <div
+                  onClick={() => replaceFileInputRef.current?.click()}
+                  className="cursor-pointer border-2 border-dashed border-navy-900/20 bg-stone/5 p-6 text-center hover:bg-stone/10 transition-colors"
+                >
+                  <RefreshCw className="mx-auto h-8 w-8 text-amber-600 mb-2" />
+                  <p className="text-xs font-medium text-navy-900">
+                    {replaceFile ? replaceFile.name : "Click to select replacement image or PDF"}
+                  </p>
+                  <p className="text-[10px] text-stone mt-1">
+                    {replaceFile
+                      ? `${formatBytes(replaceFile.size)} · Ready to replace`
+                      : "Supports images (JPEG, PNG, WebP) or PDF documents"}
+                  </p>
+                  <input
+                    ref={replaceFileInputRef}
+                    type="file"
+                    accept="image/*,application/pdf,.pdf"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setReplaceFile(e.target.files[0]);
+                      }
+                    }}
+                    className="hidden"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label className="field-label" htmlFor="replace-url-input">
+                  New File URL
+                </label>
+                <input
+                  id="replace-url-input"
+                  type="url"
+                  value={replaceUrlInput}
+                  onChange={(e) => setReplaceUrlInput(e.target.value)}
+                  placeholder="https://example.com/new-file.jpg"
+                  className="field-input"
+                  required
+                />
+              </div>
+            )}
+
+            <div>
+              <label className="field-label" htmlFor="replace-display-name">
+                Title / Display Name
+              </label>
+              <input
+                id="replace-display-name"
+                type="text"
+                value={replaceName}
+                onChange={(e) => setReplaceName(e.target.value)}
+                className="field-input"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="field-label" htmlFor="replace-alt-input">
+                Alt Text / Description (Optional)
+              </label>
+              <input
+                id="replace-alt-input"
+                type="text"
+                value={replaceAlt}
+                onChange={(e) => setReplaceAlt(e.target.value)}
+                className="field-input"
+              />
+            </div>
+
+            {replaceError && (
+              <p className="text-xs text-red-700 bg-red-50 p-2 border border-red-200">
+                {replaceError}
+              </p>
+            )}
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-navy-900/10">
+              <button
+                type="button"
+                onClick={() => setReplaceTarget(null)}
+                className="btn btn-outline"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isReplacing}
+                className="btn btn-dark inline-flex items-center gap-2"
+              >
+                {isReplacing ? <Spinner className="text-ivory" /> : null}
+                <span>Confirm &amp; Swap File</span>
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 3: Edit Details (Title & Alt) */}
+      {/* ========================================================================= */}
+      {editTarget && (
+        <Modal
+          open={!!editTarget}
+          onClose={() => setEditTarget(null)}
+          title="Edit File Information"
+        >
+          <form onSubmit={handleUpdateDetails} className="space-y-4">
+            <div>
+              <label className="field-label" htmlFor="edit-name">
+                Display Name / Title
+              </label>
+              <input
+                id="edit-name"
+                type="text"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                className="field-input"
+                required
+              />
+            </div>
+            <div>
+              <label className="field-label" htmlFor="edit-alt">
+                Alt Text / Description
+              </label>
+              <input
+                id="edit-alt"
+                type="text"
+                value={editAlt}
+                onChange={(e) => setEditAlt(e.target.value)}
+                className="field-input"
+              />
+            </div>
+            {updateError && (
+              <p className="text-xs text-red-700 bg-red-50 p-2 border border-red-200">
+                {updateError}
+              </p>
+            )}
+            <div className="flex justify-end gap-3 pt-4 border-t border-navy-900/10">
+              <button
+                type="button"
+                onClick={() => setEditTarget(null)}
+                className="btn btn-outline"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isUpdating}
+                className="btn btn-dark inline-flex items-center gap-2"
+              >
+                {isUpdating ? <Spinner className="text-ivory" /> : null}
+                <span>Save Details</span>
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 4: Delete Confirmation */}
+      {/* ========================================================================= */}
       {deleteTarget && (
         <Modal
           open={!!deleteTarget}
@@ -1014,11 +1913,11 @@ export default function MediaManager({
         >
           <div className="space-y-4">
             <p className="text-sm text-stone leading-relaxed">
-              Are you sure you want to remove{" "}
+              Are you sure you want to delete{" "}
               <strong className="text-navy-900">{deleteTarget.originalName}</strong>?
             </p>
             <p className="text-xs text-stone/80">
-              If this image or PDF is attached to buttons or displayed in gallery sections, it may no longer be accessible.
+              The underlying file will be removed. If this file was attached to buttons or displayed in gallery sections, it will no longer load.
             </p>
             <div className="flex justify-end gap-3 pt-4 border-t border-navy-900/10">
               <button
@@ -1032,17 +1931,19 @@ export default function MediaManager({
                 type="button"
                 disabled={isDeleting}
                 onClick={confirmDelete}
-                className="btn bg-red-700 text-white hover:bg-red-800"
+                className="btn bg-red-700 text-white hover:bg-red-800 inline-flex items-center gap-2"
               >
                 {isDeleting ? <Spinner className="text-white" /> : null}
-                <span>Yes, Remove File</span>
+                <span>Yes, Delete File</span>
               </button>
             </div>
           </div>
         </Modal>
       )}
 
-      {/* Full Preview Modal for Images */}
+      {/* ========================================================================= */}
+      {/* MODAL 5: Image Preview Lightbox */}
+      {/* ========================================================================= */}
       {previewItem && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/90 p-4 backdrop-blur-xs"
@@ -1062,7 +1963,7 @@ export default function MediaManager({
               <button
                 type="button"
                 onClick={() => setPreviewItem(null)}
-                className="p-1 text-stone hover:text-navy-900"
+                className="p-1 text-stone hover:text-navy-900 font-bold"
               >
                 ✕
               </button>
@@ -1079,17 +1980,101 @@ export default function MediaManager({
               <span className="text-stone">
                 {formatBytes(previewItem.sizeBytes)} · {previewItem.mimeType}
               </span>
-              <button
-                type="button"
-                onClick={() => copyUrl(previewItem)}
-                className="btn btn-dark text-xs inline-flex items-center gap-1.5"
-              >
-                <Copy className="h-3.5 w-3.5" />
-                <span>Copy URL</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => openReplaceModal(previewItem)}
+                  className="btn btn-outline text-xs inline-flex items-center gap-1.5"
+                >
+                  <RefreshCw className="h-3.5 w-3.5 text-amber-600" />
+                  <span>Replace File</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => copyUrl(previewItem)}
+                  className="btn btn-dark text-xs inline-flex items-center gap-1.5"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  <span>Copy URL</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 6: Site Image Picker from Library */}
+      {/* ========================================================================= */}
+      {showImagePicker && siteImageTargetKey && (
+        <Modal
+          open={showImagePicker}
+          onClose={() => {
+            setShowImagePicker(false);
+            setSiteImageTargetKey(null);
+          }}
+          title="Choose Image from Library"
+        >
+          <div className="space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-navy-900/10">
+              <p className="text-xs text-stone">
+                Select an existing image from your media library or upload a new one.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowImagePicker(false);
+                  setShowUploadModal(true);
+                }}
+                className="btn btn-dark text-xs py-1 px-2.5 inline-flex items-center gap-1"
+              >
+                <Plus className="h-3 w-3" />
+                <span>Upload New</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[60vh] overflow-y-auto p-1">
+              {imageList.map((img) => (
+                <div
+                  key={img.id}
+                  onClick={() => handleSelectSiteImage(img.url)}
+                  className="group relative cursor-pointer border border-navy-900/15 overflow-hidden bg-navy-950/5 hover:border-navy-900 hover:shadow-md transition-all"
+                >
+                  <div className="relative h-28 w-full">
+                    <Image
+                      src={img.url}
+                      alt={img.altText || img.originalName}
+                      fill
+                      className="object-cover transition-transform group-hover:scale-105"
+                      sizes="200px"
+                    />
+                  </div>
+                  <div className="p-2 bg-white">
+                    <p className="text-[11px] font-medium text-navy-900 truncate">
+                      {img.originalName}
+                    </p>
+                    <p className="text-[9px] text-stone truncate font-mono mt-0.5">
+                      {img.url}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-navy-900/10">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowImagePicker(false);
+                  setSiteImageTargetKey(null);
+                }}
+                className="btn btn-outline"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );
