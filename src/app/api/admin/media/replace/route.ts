@@ -22,6 +22,63 @@ function revalidateAllMediaConsumers() {
 
 export async function POST(req: NextRequest) {
   try {
+    const contentType = req.headers.get("content-type") || "";
+
+    // Support JSON payload (direct client Blob upload or URL update)
+    if (contentType.includes("application/json")) {
+      const body = await req.json();
+      const { id, url, name, altText, mimeType, sizeBytes } = body;
+
+      const targetId = typeof id === "number" ? id : parseInt(String(id), 10);
+      if (!targetId || isNaN(targetId)) {
+        return NextResponse.json({ ok: false, error: "Invalid target media ID" }, { status: 400 });
+      }
+
+      const rows = await db.select().from(media).where(eq(media.id, targetId)).limit(1);
+      const existing = rows[0];
+      if (!existing) {
+        return NextResponse.json({ ok: false, error: "Media item not found" }, { status: 404 });
+      }
+
+      const cleanUrl = (url || existing.url).trim();
+      const cleanName = (name || existing.originalName).trim();
+      const ext = path.extname(cleanName || cleanUrl).toLowerCase();
+      const isPdf = ext === ".pdf" || cleanName.toLowerCase().endsWith(".pdf") || (mimeType && mimeType.includes("pdf"));
+      const newCategory: MediaCategory = isPdf ? "pdf" : "image";
+      const newFilename = path.basename(cleanUrl.split("?")[0]) || cleanName;
+
+      // Delete old local file if replacing
+      if (existing.url !== cleanUrl && existing.url.startsWith("/uploads/")) {
+        await removeFile(existing.url).catch(() => {});
+      }
+
+      await db
+        .update(media)
+        .set({
+          url: cleanUrl,
+          filename: newFilename,
+          originalName: cleanName,
+          altText: (altText ?? existing.altText ?? cleanName).trim(),
+          mimeType: mimeType || existing.mimeType,
+          sizeBytes: typeof sizeBytes === "number" ? sizeBytes : existing.sizeBytes,
+          category: newCategory,
+        })
+        .where(eq(media.id, targetId));
+
+      revalidateAllMediaConsumers();
+
+      return NextResponse.json({
+        ok: true,
+        media: {
+          id: targetId,
+          url: cleanUrl,
+          filename: newFilename,
+          originalName: cleanName,
+        },
+      });
+    }
+
+    // Support FormData payload
     const formData = await req.formData();
     const targetIdStr = formData.get("id") as string | null;
     const targetId = targetIdStr ? parseInt(targetIdStr, 10) : null;

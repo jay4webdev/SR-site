@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useRef } from "react";
 import Image from "next/image";
+import { upload as vercelBlobUpload } from "@vercel/blob/client";
 import {
   FileText,
   Image as ImageIcon,
@@ -147,53 +148,131 @@ export default function MediaManager({
     }
   }
 
+  async function parseJsonResponse(res: Response) {
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      if (res.status === 413 || text.includes("Entity Too Large") || text.includes("Request En")) {
+        return {
+          ok: false,
+          error: "File is too large for the server function (exceeds 4.5MB). Please use direct Blob storage or upload a smaller file.",
+        };
+      }
+      return { ok: false, error: text || `Server error (${res.status} ${res.statusText})` };
+    }
+  }
+
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
     setIsUploading(true);
     setUploadError("");
 
     try {
-      const formData = new FormData();
       if (uploadMode === "file") {
         if (!selectedFile) {
           setUploadError("Please select a file to upload.");
           setIsUploading(false);
           return;
         }
+
+        let uploadedBlobUrl = "";
+        // 1. Direct browser-to-Blob upload: completely bypasses the 4.5MB serverless limit!
+        try {
+          const cleanBase = selectedFile.name
+            .replace(/\.[^/.]+$/, "")
+            .toLowerCase()
+            .replace(/[^a-z0-9-_]/g, "-")
+            .slice(0, 40) || "file";
+          const ext = selectedFile.name.includes(".") ? "." + selectedFile.name.split(".").pop()?.toLowerCase() : "";
+          const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+          const blobPathname = `${cleanBase}-${uniqueSuffix}${ext}`;
+
+          const blob = await vercelBlobUpload(blobPathname, selectedFile, {
+            access: "public",
+            handleUploadUrl: "/api/admin/media/blob-upload",
+          });
+          uploadedBlobUrl = blob.url;
+        } catch (blobErr) {
+          console.warn("[Upload] Direct Blob upload skipped or fallback needed:", blobErr);
+        }
+
+        // If direct Blob upload succeeded, record metadata via tiny JSON POST (<1KB)
+        if (uploadedBlobUrl) {
+          const saveRes = await fetch("/api/admin/media/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              url: uploadedBlobUrl,
+              originalName: displayName.trim() || selectedFile.name,
+              mimeType: selectedFile.type,
+              sizeBytes: selectedFile.size,
+              altText: altInput.trim(),
+            }),
+          });
+          const saveData = await parseJsonResponse(saveRes);
+          if (saveRes.ok && saveData.ok) {
+            setShowUploadModal(false);
+            setSelectedFile(null);
+            setUrlInput("");
+            setDisplayName("");
+            setAltInput("");
+            window.location.reload();
+            return;
+          } else {
+            throw new Error(saveData.error || "Failed to save file metadata.");
+          }
+        }
+
+        // Fallback: standard server upload endpoint
+        const formData = new FormData();
         formData.append("file", selectedFile);
+        formData.append("name", displayName.trim());
+        formData.append("altText", altInput.trim());
+
+        const res = await fetch("/api/admin/media/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await parseJsonResponse(res);
+        if (res.ok && data.ok) {
+          setShowUploadModal(false);
+          setSelectedFile(null);
+          setUrlInput("");
+          setDisplayName("");
+          setAltInput("");
+          window.location.reload();
+        } else {
+          setUploadError(data.error || "Upload failed.");
+        }
       } else {
+        // Link by URL mode
         if (!urlInput.trim()) {
           setUploadError("Please enter a valid file URL.");
           setIsUploading(false);
           return;
         }
-        formData.append("url", urlInput.trim());
-      }
-      formData.append("name", displayName.trim());
-      formData.append("altText", altInput.trim());
 
-      // Use the dedicated upload route (bypasses Next.js Server Action body serialization limits for large PDFs)
-      const res = await fetch("/api/admin/media/upload", {
-        method: "POST",
-        body: formData,
-      });
+        const saveRes = await fetch("/api/admin/media/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url: urlInput.trim(),
+            originalName: displayName.trim(),
+            altText: altInput.trim(),
+          }),
+        });
 
-      const data = await res.json();
-      if (res.ok && data.ok) {
-        setShowUploadModal(false);
-        setSelectedFile(null);
-        setUrlInput("");
-        setDisplayName("");
-        setAltInput("");
-        window.location.reload();
-      } else {
-        // If API route failed, try server action as fallback
-        const fallbackRes = await uploadMediaAction(formData);
-        if (fallbackRes.ok) {
+        const saveData = await parseJsonResponse(saveRes);
+        if (saveRes.ok && saveData.ok) {
           setShowUploadModal(false);
+          setUrlInput("");
+          setDisplayName("");
+          setAltInput("");
           window.location.reload();
         } else {
-          setUploadError(data.error || fallbackRes.error || "Upload failed.");
+          setUploadError(saveData.error || "Failed to save link.");
         }
       }
     } catch (err) {
@@ -220,44 +299,100 @@ export default function MediaManager({
     setReplaceError("");
 
     try {
-      const formData = new FormData();
-      formData.append("id", String(replaceTarget.id));
       if (replaceMode === "file") {
         if (!replaceFile) {
           setReplaceError("Please select a replacement file.");
           setIsReplacing(false);
           return;
         }
+
+        let uploadedBlobUrl = "";
+        try {
+          const cleanBase = replaceFile.name
+            .replace(/\.[^/.]+$/, "")
+            .toLowerCase()
+            .replace(/[^a-z0-9-_]/g, "-")
+            .slice(0, 40) || "file";
+          const ext = replaceFile.name.includes(".") ? "." + replaceFile.name.split(".").pop()?.toLowerCase() : "";
+          const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+          const blobPathname = `${cleanBase}-${uniqueSuffix}${ext}`;
+
+          const blob = await vercelBlobUpload(blobPathname, replaceFile, {
+            access: "public",
+            handleUploadUrl: "/api/admin/media/blob-upload",
+          });
+          uploadedBlobUrl = blob.url;
+        } catch (blobErr) {
+          console.warn("[Replace] Direct Blob upload skipped or fallback needed:", blobErr);
+        }
+
+        if (uploadedBlobUrl) {
+          const repRes = await fetch("/api/admin/media/replace", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              id: replaceTarget.id,
+              url: uploadedBlobUrl,
+              name: replaceName.trim() || replaceFile.name,
+              altText: replaceAlt.trim(),
+              mimeType: replaceFile.type,
+              sizeBytes: replaceFile.size,
+            }),
+          });
+          const repData = await parseJsonResponse(repRes);
+          if (repRes.ok && repData.ok) {
+            setReplaceTarget(null);
+            window.location.reload();
+            return;
+          } else {
+            throw new Error(repData.error || "Failed to update replaced file.");
+          }
+        }
+
+        // Server API fallback
+        const formData = new FormData();
+        formData.append("id", String(replaceTarget.id));
         formData.append("file", replaceFile);
+        formData.append("name", replaceName.trim());
+        formData.append("altText", replaceAlt.trim());
+
+        const res = await fetch("/api/admin/media/replace", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await parseJsonResponse(res);
+        if (res.ok && data.ok) {
+          setReplaceTarget(null);
+          window.location.reload();
+        } else {
+          setReplaceError(data.error || "Replacement failed.");
+        }
       } else {
+        // Replace with URL
         if (!replaceUrlInput.trim()) {
           setReplaceError("Please enter a valid replacement URL.");
           setIsReplacing(false);
           return;
         }
-        formData.append("url", replaceUrlInput.trim());
-      }
-      formData.append("name", replaceName.trim());
-      formData.append("altText", replaceAlt.trim());
 
-      // Try dedicated replace route first
-      const res = await fetch("/api/admin/media/replace", {
-        method: "POST",
-        body: formData,
-      });
+        const repRes = await fetch("/api/admin/media/replace", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: replaceTarget.id,
+            url: replaceUrlInput.trim(),
+            name: replaceName.trim(),
+            altText: replaceAlt.trim(),
+          }),
+        });
 
-      const data = await res.json();
-      if (res.ok && data.ok) {
-        setReplaceTarget(null);
-        window.location.reload();
-      } else {
-        // Fallback to Server Action
-        const fallbackRes = await replaceMediaAction(replaceTarget.id, formData);
-        if (fallbackRes.ok) {
+        const repData = await parseJsonResponse(repRes);
+        if (repRes.ok && repData.ok) {
           setReplaceTarget(null);
           window.location.reload();
         } else {
-          setReplaceError(data.error || fallbackRes.error || "Replacement failed.");
+          setReplaceError(repData.error || "Replacement failed.");
         }
       }
     } catch (err) {

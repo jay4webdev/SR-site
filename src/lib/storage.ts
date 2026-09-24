@@ -14,7 +14,7 @@ export interface StoredFileResult {
  * - SR_READ_WRITE_TOKEN
  * Handles cases where user pasted `KEY="token"` or extra quotes into env vars.
  */
-function getBlobToken(): string | null {
+export function getBlobToken(): string | null {
   const candidates = [
     process.env.BLOB_READ_WRITE_TOKEN,
     process.env.SR_READ_WRITE_TOKEN,
