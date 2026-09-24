@@ -3,7 +3,7 @@ import Reveal from "./Reveal";
 
 export default function GroupTrips() {
   return (
-    <section id="group-trips" className="bg-cream py-24 md:py-36">
+    <section id="group-trips" className="bg-cream pt-24 pb-[40px] md:pt-36">
       <div className="mx-auto max-w-[1400px] px-5 sm:px-8">
         <Reveal className="mx-auto max-w-2xl text-center">
           <p className="eyebrow text-ocean-500">

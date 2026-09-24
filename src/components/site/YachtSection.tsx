@@ -38,7 +38,7 @@ export default function YachtSection({
   const remainingImages = galleryList.slice(3);
 
   return (
-    <section id="yacht" className="bg-cream py-24 md:py-36">
+    <section id="yacht" className="bg-cream pt-[40px] pb-24 md:pb-36">
       <div className="mx-auto max-w-[1400px] px-5 sm:px-8">
         <Reveal className="mx-auto max-w-3xl text-center">
           <p className="eyebrow text-ocean-500">04 · The Vessel</p>
