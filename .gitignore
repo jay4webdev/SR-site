@@ -29,3 +29,6 @@ Thumbs.db
 
 # Generated or local-only verification artifacts
 .shots/
+-e 
+.pglite/
+*.tsbuildinfo

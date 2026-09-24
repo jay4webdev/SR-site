@@ -21,7 +21,7 @@ export const DEFAULT_BUTTON_DOWNLOADS: ButtonDownloadsConfig = {
   yachtButton: {
     enabled: true,
     buttonText: "Download Yacht Specs & Rates (PDF)",
-    pdfUrl: "/packages/salt-republic-usd-package.pdf",
+    pdfUrl: "/packages/salt-republic-rates-and-packages.pdf",
     pdfLabel: "Finch 65 Specifications & Charter Rates",
   },
   menuButton: {
@@ -33,14 +33,14 @@ export const DEFAULT_BUTTON_DOWNLOADS: ButtonDownloadsConfig = {
   headerButton: {
     enabled: false,
     buttonText: "Brochure (PDF)",
-    pdfUrl: "/packages/salt-republic-usd-package.pdf",
+    pdfUrl: "/packages/salt-republic-rates-and-packages.pdf",
     pdfLabel: "Salt Republic Luxury Charter Brochure",
   },
   heroButton: {
     enabled: true,
     buttonText: "Download Rates (PDF)",
-    pdfUrl: "/packages/salt-republic-usd-package.pdf",
-    pdfLabel: "Salt Republic Full Packages Brochure",
+    pdfUrl: "/packages/salt-republic-rates-and-packages.pdf",
+    pdfLabel: "Salt Republic Full Packages & Rates Brochure",
   },
 };
 

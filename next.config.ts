@@ -5,11 +5,14 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["@electric-sql/pglite", "pg"],
   experimental: {
     serverActions: {
+      bodySizeLimit: "25mb",
       allowedOrigins: [
         "*.run.app",
         "*.asia-southeast1.run.app",
         "ais-dev-4s5fmrhihpk5d5onpmdmlp-190401891669.asia-southeast1.run.app",
         "ais-pre-4s5fmrhihpk5d5onpmdmlp-190401891669.asia-southeast1.run.app",
+        "*.vercel.app",
+        "saltrepublic.mv",
       ],
     },
   },
@@ -18,6 +21,7 @@ const nextConfig: NextConfig = {
     "*.asia-southeast1.run.app",
     "ais-dev-4s5fmrhihpk5d5onpmdmlp-190401891669.asia-southeast1.run.app",
     "ais-pre-4s5fmrhihpk5d5onpmdmlp-190401891669.asia-southeast1.run.app",
+    "*.vercel.app",
   ],
   async redirects() {
     return [

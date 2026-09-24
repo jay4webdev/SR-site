@@ -362,7 +362,7 @@ export async function initInMemoryDb(pg: PGlite) {
     yachtButton: {
       enabled: true,
       buttonText: "Download Yacht Specs & Rates (PDF)",
-      pdfUrl: "/packages/salt-republic-usd-package.pdf",
+      pdfUrl: "/packages/salt-republic-rates-and-packages.pdf",
       pdfLabel: "Finch 65 Specifications & Charter Rates",
     },
     menuButton: {
@@ -374,20 +374,20 @@ export async function initInMemoryDb(pg: PGlite) {
     headerButton: {
       enabled: false,
       buttonText: "Brochure (PDF)",
-      pdfUrl: "/packages/salt-republic-usd-package.pdf",
+      pdfUrl: "/packages/salt-republic-rates-and-packages.pdf",
       pdfLabel: "Salt Republic Luxury Charter Brochure",
     },
     heroButton: {
       enabled: true,
       buttonText: "Download Rates (PDF)",
-      pdfUrl: "/packages/salt-republic-usd-package.pdf",
-      pdfLabel: "Salt Republic Full Packages Brochure",
+      pdfUrl: "/packages/salt-republic-rates-and-packages.pdf",
+      pdfLabel: "Salt Republic Full Packages & Rates Brochure",
     },
   });
 
   await pg.query(
     `INSERT INTO "settings" ("key", "value") VALUES ('button_downloads', $1)
-     ON CONFLICT ("key") DO NOTHING`,
+     ON CONFLICT ("key") DO UPDATE SET "value" = $1, "updated_at" = now()`,
     [defaultButtonDownloads]
   );
 
@@ -403,7 +403,8 @@ export async function initInMemoryDb(pg: PGlite) {
     ["/images/sunset.jpg", "sunset.jpg", "Golden Hour Sunset", "image/jpeg", 250000, "image", "Spectacular sunset cruise across the Indian Ocean"],
     ["/images/snorkeling.jpg", "snorkeling.jpg", "Reef Snorkeling", "image/jpeg", 265000, "image", "Crystal clear lagoon reef exploration"],
     ["/images/toys.jpg", "toys.jpg", "Water Toys & Gear", "image/jpeg", 245000, "image", "Jet ski, underwater scooters and ocean toys"],
-    ["/packages/salt-republic-usd-package.pdf", "salt-republic-usd-package.pdf", "Salt Republic Charter Packages (USD)", "application/pdf", 1450000, "pdf", "Full charter brochure and pricing in USD"],
+    ["/packages/salt-republic-rates-and-packages.pdf", "salt-republic-rates-and-packages.pdf", "Salt Republic Charter Rates & Equipment Brochure", "application/pdf", 3520000, "pdf", "Full charter rates, free equipment, motorised toys and overnight facilities"],
+    ["/packages/salt-republic-usd-package.pdf", "salt-republic-usd-package.pdf", "Salt Republic Charter Packages (USD)", "application/pdf", 3520000, "pdf", "Full charter brochure and pricing in USD"],
     ["/packages/salt-republic-mvr-package.pdf", "salt-republic-mvr-package.pdf", "Salt Republic Charter Packages (MVR)", "application/pdf", 1420000, "pdf", "Charter brochure and dining menu in MVR"],
   ];
 
